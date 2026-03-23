@@ -201,4 +201,43 @@ app.get('/debug-tg', async (req, res) => {
   });
 });
 
+
+app.get('/debug-tg', async (req, res) => {
+  // Use correct env var names (with TELEGRAM_ prefix)
+  const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
+  const CHAT_ID = process.env.TELEGRAM_CHAT_ID || '';
+  
+  // Log all env var names (for debugging)
+  const allVarNames = Object.keys(process.env).filter(k => !k.includes('SECRET') && !k.includes('KEY'));
+  console.log('[debug] All env vars:', allVarNames.join(', '));
+  
+  // Test Telegram
+  let tgTest = 'not tested';
+  if (BOT_TOKEN && CHAT_ID) {
+    try {
+      const r = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: CHAT_ID, text: '[Debug] Railway Telegram test - variables ARE working!', parse_mode: 'Markdown' })
+      });
+      const j = await r.json();
+      tgTest = j.ok ? 'SENT msg_id=' + j.message_id : 'FAIL: ' + JSON.stringify(j).slice(0,100);
+    } catch(e) {
+      tgTest = 'ERROR: ' + e.message;
+    }
+  } else {
+    tgTest = 'SKIPPED (BOT_TOKEN=' + (BOT_TOKEN?'set':'MISSING') + ', CHAT_ID=' + (CHAT_ID?'set':'MISSING') + ')';
+  }
+  
+  console.log('[debug] telegram test:', tgTest);
+  res.json({
+    hasToken: !!BOT_TOKEN,
+    hasChatId: !!CHAT_ID,
+    tokenPrefix: BOT_TOKEN ? BOT_TOKEN.slice(0, 10) + '...' : 'MISSING',
+    chatId: CHAT_ID || 'MISSING',
+    allVarNames: allVarNames,
+    telegramTest: tgTest,
+  });
+});
+
 app.listen(PORT, () => { console.log('Whale signal system V1 ready'); console.log('Listening on port : ' + PORT); });
