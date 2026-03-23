@@ -137,6 +137,15 @@ app.get('/test', async (req, res) => {
 app.post('/webhook/helius', heliusWebhookHandler);
 
 // Background: take profit + momentum check every 60s
+
+app.get("/debug-tg", (req, res) => {
+  res.json({
+    TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN ? "SET ("+process.env.TELEGRAM_BOT_TOKEN.slice(0,6)+"...)" : "MISSING",
+    TELEGRAM_CHAT_ID: process.env.TELEGRAM_CHAT_ID || "MISSING",
+    NODE_ENV: process.env.NODE_ENV,
+    all_vars: Object.keys(process.env).filter(k => !k.includes("SECRET") && !k.includes("KEY") && !k.includes("PASSWORD")),
+  });
+});
 setInterval(async () => {
   try {
     const { checkTakeProfit, executeSignal, formatTakeProfitMessage, sendMessage, getPosition, momentumQueue, formatTradeMessage } = await import('./execution/trader.js');
@@ -239,5 +248,28 @@ app.get('/debug-tg', async (req, res) => {
     telegramTest: tgTest,
   });
 });
+
+
+// DEBUG: dump ALL env vars (masked) + test Telegram at startup
+(function() {
+  const BOT = process.env.TELEGRAM_BOT_TOKEN || '';
+  const CHAT = process.env.TELEGRAM_CHAT_ID || '';
+  console.log('[init] TELEGRAM_BOT_TOKEN set:', !!BOT, 'prefix:', BOT.slice(0,6));
+  console.log('[init] TELEGRAM_CHAT_ID set:', !!CHAT);
+  
+  if (BOT && CHAT) {
+    fetch(`https://api.telegram.org/bot${BOT}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: CHAT, text: '*Railway started*
+
+Bot is running!', parse_mode: 'Markdown' })
+    }).then(r => r.json()).then(j => {
+      console.log('[init] Telegram test:', j.ok ? 'SENT msg_id='+j.message_id : 'FAIL '+JSON.stringify(j));
+    }).catch(e => console.error('[init] Telegram error:', e.message));
+  } else {
+    console.error('[init] Telegram NOT configured - BOT:', !!BOT, 'CHAT:', !!CHAT);
+  }
+})();
 
 app.listen(PORT, () => { console.log('Whale signal system V1 ready'); console.log('Listening on port : ' + PORT); });
