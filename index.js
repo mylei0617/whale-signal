@@ -321,7 +321,7 @@ app.listen(PORT, () => {
       if (toExec.length > 0) {
         console.log(`[bg] 动量确认: ${toExec.length}笔，执行BUY`);
         for (const m of toExec) {
-          const result = await executeSignal(m.signalType, getPosition());
+          const result = await executeSignal(m.signalType, getPosition(), m.tx || "");
           if (result) {
             await sendMessage(formatTradeMessage(result));
           }

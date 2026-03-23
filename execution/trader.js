@@ -9,8 +9,9 @@ import { recordOpen, recordClose, checkTakeProfit } from "./performance.js";
 // ─── 状态 ────────────────────────────────────────────────────────────────
 let tradeLog      = [];
 let paperPosition = 0;
-let momentumQueue = []; // { ts, entryPrice, signalType }
+let momentumQueue = []; // { ts, entryPrice, signalType, tx }
 let recentSells = [];   // { wallet, ts }
+let processedTx = new Set(); // 幂等控制：已处理的tx
 
 // ─── 配置 ────────────────────────────────────────────────────────────────
 const MODE = process.env.TRADE_MODE || "paper";
@@ -84,21 +85,29 @@ const POSITION_MAP = {
   RESONANCE: 15, SMART_RESONANCE: 30, SELL_RESONANCE: 0, STOP_LOSS: 0,
 };
 
-export async function executeSignal(signalType, currentPosition = 0) {
+export async function executeSignal(signalType, currentPosition = 0, tx = "") {
+  // 幂等检查
+  if (tx && processedTx.has(tx)) {
+    console.log(`[trader] duplicate tx ignored: ${tx.slice(0,20)}`);
+    return null;
+  }
+
   const targetPos = POSITION_MAP[signalType] ?? 0;
   if (targetPos === 0 && signalType !== "SELL_RESONANCE" && signalType !== "STOP_LOSS") return null;
 
   // SELL / 止损
   if (signalType === "SELL_RESONANCE" || signalType === "STOP_LOSS") {
     if (checkReverseExit()) console.log("[trader] 🚨 反向信号平仓触发");
-    return await doSell(signalType, signalType === "STOP_LOSS" ? "止损" : "SELL信号");
+    const result = await doSell(signalType, signalType === "STOP_LOSS" ? "止损" : "SELL信号");
+    if (result && tx) processedTx.add(tx);
+    return result;
   }
 
   // BUY：动量过滤，先入队等5分钟
   const price = await getMarketPrice();
   if (price > 0) {
-    momentumQueue.push({ ts: Date.now(), entryPrice: price, signalType, wallet: "pending" });
-    console.log(`[trader] ⏳ 动量等待中，5分钟后确认...`);
+    momentumQueue.push({ ts: Date.now(), entryPrice: price, signalType, tx });
+    console.log(`[trader] ⏳ 动量等待中，5分钟后确认... tx=${tx.slice(0,20)}`);
   }
   return null; // 等5分钟后再处理
 }
@@ -133,6 +142,6 @@ export function addSellSignal(wallet) { recentSells.push({ wallet, ts: Date.now(
 export function getPosition() { return MODE === "paper" ? paperPosition : 0; }
 export { checkTakeProfit, checkReverseExit };
 
-export { momentumQueue, recentSells };
+export { momentumQueue, recentSells, processedTx };
 
 console.log(`Execution engine ready (${MODE} mode)`);

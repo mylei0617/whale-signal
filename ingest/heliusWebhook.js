@@ -229,7 +229,8 @@ async function processEvent(evt) {
         isResonance ? (hasTierS([...new Set(recentBuys.map(b => b.wallet))]) ? "SMART_RESONANCE" : "RESONANCE")
         : prePump ? (prePump.hasTierS ? "PRE_PUMP_TIER_S" : prePump.hasTierA ? "PRE_PUMP_TIER_A" : "PRE_PUMP")
         : "RESONANCE",
-        getPosition()
+        getPosition(),
+        tx.tx
       );
       // 发送确认消息
       const sigName = isResonance ? "共振信号" : prePump ? "Pre-Pump信号" : "BUY信号";
