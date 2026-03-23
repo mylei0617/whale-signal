@@ -300,4 +300,31 @@ app.get("/debug-tg", function(req, res) {
   });
 });
 
+
+(function() {
+  var BOT = process.env.TELEGRAM_BOT_TOKEN || '';
+  var CHAT = process.env.TELEGRAM_CHAT_ID || '';
+  console.log('[init] TELEGRAM_BOT_TOKEN set:', !!BOT, 'prefix:', BOT.slice(0,6));
+  console.log('[init] TELEGRAM_CHAT_ID set:', !!CHAT);
+  if (BOT && CHAT) {
+    fetch('https://api.telegram.org/bot' + BOT + '/sendMessage', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: CHAT, text: '*Railway started* - Bot is online!', parse_mode: 'Markdown' })
+    }).then(function(r) { return r.json(); })
+      .then(function(j) { console.log('[init] Telegram:', j.ok ? 'SENT msg_id='+j.message_id : 'FAIL ' + JSON.stringify(j)); })
+      .catch(function(e) { console.error('[init] Telegram err:', e.message); });
+  } else {
+    console.error('[init] Telegram NOT configured - BOT:', !!BOT, 'CHAT:', !!CHAT);
+  }
+})();
+
+app.get('/debug-tg', function(req, res) {
+  res.json({
+    TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN ? 'SET (' + process.env.TELEGRAM_BOT_TOKEN.slice(0,6) + '...)' : 'MISSING',
+    TELEGRAM_CHAT_ID: process.env.TELEGRAM_CHAT_ID || 'MISSING',
+    NODE_ENV: process.env.NODE_ENV || 'unknown'
+  });
+});
+
 app.listen(PORT, () => { console.log('Whale signal system V1 ready'); console.log('Listening on port : ' + PORT); });
