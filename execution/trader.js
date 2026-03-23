@@ -14,6 +14,7 @@ let recentSells = [];   // { wallet, ts }
 let processedTx = new Set(); // 幂等控制：已处理的tx
 
 // ─── 配置 ────────────────────────────────────────────────────────────────
+const DEBUG = process.env.DEBUG === "true";
 const MODE = process.env.TRADE_MODE || "paper";
 const BYBIT_TESTNET = process.env.BYBIT_TESTNET === "true";
 

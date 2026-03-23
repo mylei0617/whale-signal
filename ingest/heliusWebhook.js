@@ -24,7 +24,7 @@ function checkPrePump(wallet, direction, usd) {
   // 过滤条件：至少1个钱包 winRate ≥ 0.55
   const highWinRateCount = uniqueWallets.filter(w => (walletStats[w]?.winRate || 0.5) >= 0.55).length;
   if (highWinRateCount < 1) {
-    console.log(`[prePump] Filtered: no wallet with winRate ≥ 0.55 (wallets=${uniqueWallets.length})`);
+    debug(false, `PrePump filtered: no wallet winRate≥0.55 (${uniqueWallets.length} wallets, all below threshold)`);
     return null;
   }
 
@@ -154,7 +154,7 @@ async function processEvent(evt) {
 
   // 3b. 过滤无效 amount
   if (!tx.usd || tx.usd <= 0) {
-    console.log(`[webhook] Skipping: usd=${tx.usd} <= 0`);
+    console.log(`[webhook] {signal:"${features.direction}",passed:false,reason:"amount=${tx.usd} <= 0 (invalid)"}`);
     return;
   }
 
@@ -220,9 +220,19 @@ async function processEvent(evt) {
     console.log(`[webhook] 🔥 RESONANCE DETECTED! score=${totalScore}`);
   }
 
-  console.log(`[webhook] tx=${tx.tx.slice(0,20)} dir=${features.direction} score=${totalScore} resonance=${isResonance}`);
+  console.log(`[webhook] tx=${tx.tx.slice(0,20)} dir=${features.direction} score=${totalScore} resonance=${isResonance} usd=${tx.usd}`);
+
+  // Debug: log all signal decisions
+  const debug = (passed, reason) => {
+    console.log(`[webhook] {signal:"${features.direction}",passed:${passed},reason:"${reason}",score:${totalScore},usd:${tx.usd}}`);
+  };
 
   // 8. BUY信号加入动量队列，等5分钟后再处理
+  if (features.direction === "BUY" && (isResonance || prePump || totalScore >= 70)) {
+    debug(true, "BUY signal queued for momentum confirmation");
+  } else if (features.direction === "BUY") {
+    debug(false, `score=${totalScore} < 70 (below threshold)`);
+  }
   // 记录建仓价格用于风控，momentum确认后自动执行
   if (features.direction === "BUY" && (isResonance || prePump || totalScore >= 70)) {
     let price;
