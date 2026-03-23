@@ -147,6 +147,7 @@ export function addSellSignal(wallet) { recentSells.push({ wallet, ts: Date.now(
 
 // ─── 导出 ───────────────────────────────────────────────────────────────
 export function getPosition() { return MODE === "paper" ? paperPosition : 0; }
+export function getTradeLog() { return tradeLog.slice(0, 50); }
 export { checkTakeProfit, checkReverseExit };
 
 export { momentumQueue, recentSells, processedTx };
