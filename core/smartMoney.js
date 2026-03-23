@@ -11,14 +11,15 @@ let checkTimer = null;           // 定时器引用
 
 // ─── Tier 映射 ────────────────────────────────────────────────────────────
 export const TIER_MAP = {
-  S: { emoji: "👑", label: "S级", minWinRate: 0.7, minProfit: 0.02, scoreBonus: 40 },
-  A: { emoji: "💎", label: "A级", minWinRate: 0.6, scoreBonus: 20 },
-  B: { emoji: "🔵", label: "B级", minWinRate: 0.5, scoreBonus: 0  },
-  C: { emoji: "⚠️", label: "C级", minWinRate: 0.0, scoreBonus: -20 },
+  S: { emoji: "👑", label: "S级", scoreBonus: 40 },
+  A: { emoji: "💎", label: "A级", scoreBonus: 20 },
+  B: { emoji: "🔵", label: "B级", scoreBonus: 0  },
+  C: { emoji: "⚠️", label: "C级", scoreBonus: -20 },
 };
 
-// ─── 计算钱包 Tier ───────────────────────────────────────────────────────
-export function calcTier(winRate, avgProfit = 0) {
+// ─── 计算钱包 Tier（样本量 ≥ 30 才生效）──────────────────────────────────
+export function calcTier(winRate, avgProfit = 0, totalTrades = 0) {
+  if (totalTrades < 30) return "C"; // 样本不足，强制 C 级
   if (winRate > 0.7 && avgProfit > 0.02) return "S";
   if (winRate >= 0.6) return "A";
   if (winRate >= 0.5) return "B";
@@ -28,7 +29,7 @@ export function calcTier(winRate, avgProfit = 0) {
 // ─── 初始化 ───────────────────────────────────────────────────────────────
 function initWallet(wallet) {
   if (!walletStats[wallet]) {
-    walletStats[wallet] = { totalTrades: 0, wins: 0, winRate: 0.5, avgProfit: 0, tier: "B" };
+    walletStats[wallet] = { totalTrades: 0, wins: 0, winRate: 0.5, avgProfit: 0, tier: "C" };
   }
 }
 
@@ -97,16 +98,21 @@ function updateStats(wallet, isWin, profit) {
   if (isWin) s.wins += 1;
   s.avgProfit = s.avgProfit === 0 ? profit : s.avgProfit * 0.7 + profit * 0.3;
   s.winRate = s.wins / s.totalTrades;
-  s.tier = calcTier(s.winRate, s.avgProfit);
+  s.tier = calcTier(s.winRate, s.avgProfit, s.totalTrades);
 }
 
 // ─── 格式化胜率+Tier 信息 ────────────────────────────────────────────────
 export function formatWinRateInfo(wallets) {
   return wallets.map(w => {
-    const s = walletStats[w] || { winRate: 0.5, tier: "B", avgProfit: 0 };
-    const rate = Math.round((s.winRate || 0.5) * 100);
-    const tierInfo = TIER_MAP[s.tier] || TIER_MAP.B;
+    const s = walletStats[w] || { winRate: 0.5, tier: "C", avgProfit: 0, totalTrades: 0 };
     const short = w.length > 8 ? `${w.slice(0,4)}...${w.slice(-4)}` : w;
+
+    if (s.totalTrades < 30) {
+      return `${short}（⚠️样本不足 ${s.totalTrades}/30）`;
+    }
+
+    const rate = Math.round((s.winRate || 0.5) * 100);
+    const tierInfo = TIER_MAP[s.tier] || TIER_MAP.C;
     const profitTag = s.tier === "S" ? ` 收益${(s.avgProfit*100).toFixed(1)}%` : "";
     return `${short}（${tierInfo.emoji}${tierInfo.label} ${rate}%）${profitTag}`;
   });
