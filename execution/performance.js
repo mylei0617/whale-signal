@@ -110,6 +110,10 @@ export function getHistory() {
   return tradeHistory.slice(0, 50);
 }
 
+export function getTradeLog() {
+  return tradeHistory.slice(0, 50);
+}
+
 // ─── 获取开仓记录 ───────────────────────────────────────────────────────
 export function getOpenPositions() {
   return openPositions;
