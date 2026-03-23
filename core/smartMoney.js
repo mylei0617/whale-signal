@@ -6,7 +6,7 @@ import { getTrumpPrice } from "./price.js";
 
 // ─── 内存数据库 ──────────────────────────────────────────────────────────
 export let walletStats = {};     // wallet → { totalTrades, wins, winRate, avgProfit, tier }
-let pendingSignals = [];         // { wallet, price, ts, tx, score }
+export let pendingSignals = [];         // { wallet, price, ts, tx, score }
 let checkTimer = null;           // 定时器引用
 
 // ─── Tier 映射 ────────────────────────────────────────────────────────────

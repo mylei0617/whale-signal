@@ -216,31 +216,26 @@ async function processEvent(evt) {
 
   console.log(`[webhook] tx=${tx.tx.slice(0,20)} dir=${features.direction} score=${totalScore} resonance=${isResonance}`);
 
-  // 8. 记录 BUY 信号用于30分钟后回溯（同时记录建仓价格用于风控）
-  if (features.direction === "BUY" && totalScore >= 30) {
+  // 8. BUY信号加入动量队列，等5分钟后再处理
+  // 记录建仓价格用于风控，momentum确认后自动执行
+  if (features.direction === "BUY" && (isResonance || prePump || totalScore >= 70)) {
     let price;
-    try {
-      price = await getTrumpPrice();
-    } catch {
-      price = 0;
-    }
+    try { price = await getTrumpPrice(); } catch { price = 0; }
     if (price > 0) {
-      recordSignal(tx.wallet, price, tx.tx, totalScore);
       recordEntry(price);
-      // 风控检查
-      const risk = checkStopLoss(price);
-      if (risk.triggered) {
-        const riskMsg = `\n─────────────\n${risk.message}`;
-        await sendMessage(riskMsg);
-        const trade = await executeSignal("STOP_LOSS", getPosition());
-        if (trade) {
-          await sendMessage(formatTradeMessage(trade));
-        }
-        if (risk.systemPause) return; // 系统暂停，停止本次推送
-      }
+      recordSignal(tx.wallet, price, tx.tx, totalScore);
+      // 执行signal（加入动量队列，5分钟后再处理）
+      await executeSignal(
+        isResonance ? (hasTierS([...new Set(recentBuys.map(b => b.wallet))]) ? "SMART_RESONANCE" : "RESONANCE")
+        : prePump ? (prePump.hasTierS ? "PRE_PUMP_TIER_S" : prePump.hasTierA ? "PRE_PUMP_TIER_A" : "PRE_PUMP")
+        : "RESONANCE",
+        getPosition()
+      );
+      // 发送确认消息
+      const sigName = isResonance ? "共振信号" : prePump ? "Pre-Pump信号" : "BUY信号";
+      await sendMessage(`⏳ *${sigName}已记录*\n\n等待5分钟确认价格走势...\n当前价格：$${price}\n5分钟后自动执行建仓`);
     }
   }
-  // 8+9. 记录 BUY 信号 + 风控检查 + 共振优先推送
   if (isResonance) {
     const isSmart = [...new Set(recentBuys.map(b => b.wallet))].some(w => (walletStats[w]?.winRate || 0.5) > 0.6);
     const signalType = isSmart ? "SMART_RESONANCE" : "RESONANCE";

@@ -41,11 +41,11 @@ app.get("/stats", async (req, res) => {
 });
 
 app.get("/dashboard", async (req, res) => {
-  const { getTradeLog, getPosition } = await import("./execution/trader.js");
+  const { getTradeLog, getPosition: getTraderPos } = await import("./execution/trader.js");
   const { getOpenPositions: getPerfOpen, getStats } = await import("./execution/performance.js");
   const { walletStats } = await import("./core/smartMoney.js");
 
-  const pos = getPosition();
+  const pos = getTraderPos();
   const stats = getStats();
   const open = getPerfOpen();
   const trades = getTradeLog().slice(0, 20);
@@ -88,7 +88,7 @@ Object.entries(walletStats).slice(0,10).map(([w,s]) => `<tr><td>${w.slice(0,8)}.
 });
 
 app.get("/trades", async (req, res) => {
-  const { getTradeLog, getPosition } = await import("./execution/trader.js");
+  const { getTradeLog, getPosition: getTraderPos } = await import("./execution/trader.js");
   const { getOpenPositions: getPerfOpen } = await import("./execution/performance.js");
   const log = getTradeLog().slice(0, 20).map(t => ({
     ts: new Date(t.ts).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" }),
@@ -103,9 +103,8 @@ app.get("/trades", async (req, res) => {
     position: `${o.position}%`,
     signal: o.signalType,
     holding: `${Math.round((Date.now() - o.ts) / 60000)}分钟`,
-    gain: o.soldQty !== undefined ? `${o.soldQty}%` : "-",
   }));
-  res.json({ ok: true, currentPosition: getPosition() + "%", openPositions: open, trades: log });
+  res.json({ ok: true, currentPosition: getTraderPos() + "%", openPositions: open, trades: log });
 });
 
 // Helius webhook endpoint
@@ -313,14 +312,21 @@ app.listen(PORT, () => {
       // 止盈检查
       const tp = await checkTakeProfit();
       if (tp.length > 0) {
-        await sendMessage(formatTakeProfitMessage(tp));
+        const msg = formatTakeProfitMessage(tp);
+        if (msg) await sendMessage(msg);
         console.log(`[bg] 止盈触发: ${tp.length}笔`);
       }
-      // 动量确认（5分钟等待）
+      // 动量确认（5分钟等待后执行BUY）
       const toExec = momentumQueue.filter(m => now - m.ts >= 5 * 60 * 1000);
       if (toExec.length > 0) {
         console.log(`[bg] 动量确认: ${toExec.length}笔，执行BUY`);
-        for (const m of toExec) await executeSignal(m.signalType, getPosition());
+        for (const m of toExec) {
+          const result = await executeSignal(m.signalType, getPosition());
+          if (result) {
+            await sendMessage(formatTradeMessage(result));
+          }
+        }
+        momentumQueue.splice(0, toExec.length);
       }
     } catch(e) { console.error("[bg] Error:", e.message); }
   }, 60 * 1000);
