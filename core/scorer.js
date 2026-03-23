@@ -1,8 +1,9 @@
 // ─── scorer.js ─────────────────────────────────────────────────────────────
+import { applyWinRateScore } from "./smartMoney.js";
 
 /**
- * Score a transaction based on extracted features.
- * @param {{ isTarget: boolean, direction: string, sizeScore: number }} features
+ * Score a transaction based on extracted features + wallet win rate.
+ * @param {{ isTarget: boolean, direction: string, sizeScore: number, wallet: string }} features
  * @returns {number} score
  */
 export function score(features) {
@@ -12,7 +13,7 @@ export function score(features) {
       return 0;
     }
 
-    const { direction, sizeScore } = features;
+    const { direction, sizeScore, wallet } = features;
     let total = 0;
 
     // Direction score
@@ -21,6 +22,9 @@ export function score(features) {
 
     // Size bonus: large transactions carry more weight
     if ((Number(sizeScore) || 0) > 0.5) total += 20;
+
+    // Step 5: Smart Money 胜率加权
+    total = applyWinRateScore(total, wallet);
 
     return total;
 
