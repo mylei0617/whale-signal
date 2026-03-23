@@ -18,14 +18,25 @@ app.get("/health", (req, res) => {
 
 app.get("/stats", async (req, res) => {
   const { walletStats } = await import("./core/smartMoney.js");
-  const entries = Object.entries(walletStats).map(([wallet, s]) => ({
+  const { getStats: perfStats, getTradeLog, getPosition } = await import("./execution/trader.js");
+
+  const walletEntries = Object.entries(walletStats).map(([wallet, s]) => ({
     wallet: wallet.slice(0,8) + "...",
     totalTrades: s.totalTrades,
     wins: s.wins,
-    winRate: Math.round(s.winRate * 100) + "%",
-    tier: s.tier,
+    winRate: Math.round((s.winRate || 0) * 100) + "%",
+    tier: s.tier || "B",
+    avgProfit: ((s.avgProfit || 0) * 100).toFixed(1) + "%",
   }));
-  res.json({ ok: true, wallets: entries, count: entries.length });
+
+  const perf = perfStats();
+
+  res.json({
+    ok: true,
+    currentPosition: getPosition() + "%",
+    performance: perf,
+    wallets: walletEntries,
+  });
 });
 
 app.get("/trades", async (req, res) => {

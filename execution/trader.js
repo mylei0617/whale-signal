@@ -3,19 +3,19 @@
 // 根据信号自动下单（Paper / Live 模式）
 
 import crypto from "crypto";
+import { recordOpen, recordClose } from "./performance.js";
 
 // ─── 配置 ────────────────────────────────────────────────────────────────
-const MODE         = process.env.TRADE_MODE   || "paper";   // paper | live
-const EXCHANGE    = process.env.TRADE_EXCHANGE || "bybit";  // bybit
+const MODE         = process.env.TRADE_MODE   || "paper";
+const EXCHANGE    = process.env.TRADE_EXCHANGE || "bybit";
 
 const BYBIT_API_KEY    = process.env.BYBIT_API_KEY    || "";
 const BYBIT_API_SECRET = process.env.BYBIT_API_SECRET || "";
-const BYBIT_PASSPHRASE = process.env.BYBIT_PASSPHRASE || "";
 const BYBIT_TESTNET    = process.env.BYBIT_TESTNET    === "true";
 
 // ─── 状态 ────────────────────────────────────────────────────────────────
-let tradeLog = [];       // 交易记录
-let paperPosition = 0;   // Paper 模拟仓位
+let tradeLog      = [];       // 交易记录
+let paperPosition = 0;        // Paper 模拟仓位
 
 // ─── 仓位映射 ────────────────────────────────────────────────────────────
 const POSITION_MAP = {
@@ -25,6 +25,7 @@ const POSITION_MAP = {
   RESONANCE:       15,
   SMART_RESONANCE: 30,
   SELL_RESONANCE:  0,
+  STOP_LOSS:        0,
 };
 
 // ─── 工具函数 ────────────────────────────────────────────────────────────
@@ -35,20 +36,18 @@ function now() {
 function logTrade(entry) {
   tradeLog.unshift({ ts: Date.now(), ...entry });
   if (tradeLog.length > 100) tradeLog.pop();
-  console.log(`[trader] ${entry.action} ${entry.side} ${entry.quantity}% @ $${entry.price} (${entry.mode})`);
+  console.log(`[trader] ${entry.action} ${entry.side} ${entry.quantity || "-"}% @ $${entry.price} (${entry.mode})`);
 }
 
-// ─── Bybit 签名 ─────────────────────────────────────────────────────────
+// ─── Bybit 签名 ──────────────────────────────────────────────────────────
 async function bybitRequest(method, path, params = {}) {
-  const ts = Date.now().toString();
-  const recv = (ts + 10000).toString();
+  const ts    = Date.now().toString();
+  const recv  = (parseInt(ts) + 10000).toString();
   const paramStr = Object.entries(params).map(([k, v]) => `${k}=${v}`).join("&");
   const signStr  = ts + BYBIT_API_KEY + recv + paramStr;
   const sign     = crypto.createHmac("sha256", BYBIT_API_SECRET).update(signStr).digest("hex");
 
-  const base = BYBIT_TESTNET
-    ? "https://api-testnet.bybit.com"
-    : "https://api.bybit.com";
+  const base = BYBIT_TESTNET ? "https://api-testnet.bybit.com" : "https://api.bybit.com";
 
   const res = await fetch(`${base}${path}?${paramStr}`, {
     method,
@@ -65,131 +64,91 @@ async function bybitRequest(method, path, params = {}) {
   return res.json();
 }
 
-// ─── 获取当前市场价格 ────────────────────────────────────────────────────
+// ─── 获取市场价格 ─────────────────────────────────────────────────────────
 async function getMarketPrice(symbol = "TRUMP-USDT") {
   if (MODE === "paper") {
-    // Paper 模式：从 price.js 获取模拟价格
     try {
       const { getTrumpPrice } = await import("../core/price.js");
       return await getTrumpPrice();
-    } catch {
-      return 0;
-    }
+    } catch { return 0; }
   }
   try {
     const data = await bybitRequest("GET", "/v5/market/ticker", { category: "spot", symbol });
     return parseFloat(data.result?.list?.[0]?.lastPrice || "0");
-  } catch {
-    return 0;
-  }
+  } catch { return 0; }
 }
 
 // ─── 执行买入 ────────────────────────────────────────────────────────────
 async function executeBuy(signalType, targetPosition) {
-  const price = await getMarketPrice();
+  const price    = await getMarketPrice();
   if (!price) { console.error("[trader] Cannot get price"); return null; }
 
-  const mode     = MODE;
   const quantity = targetPosition;
+  const mode     = MODE;
 
+  // Paper 模式
   if (mode === "paper") {
     paperPosition = quantity;
   } else {
     // Live: Bybit 市价单
+    recordOpen(price, quantity, signalType);
     try {
       const res = await bybitRequest("POST", "/v5/order/create", {
-        category: "spot",
-        symbol:   "TRUMPUSDT",
-        side:     "Buy",
-        orderType:"Market",
-        qty:      quantity.toString(),  // 实际按金额，这里简化
-        marketUnit: "quote",
+        category: "spot", symbol: "TRUMPUSDT",
+        side: "Buy", orderType: "Market",
+        qty: quantity.toString(), marketUnit: "quote",
       });
-      if (res.retCode !== 0) {
-        console.error("[trader] Bybit buy error:", res.retMsg);
-        return null;
-      }
-    } catch (e) {
-      console.error("[trader] Bybit buy failed:", e.message);
-      return null;
-    }
+      if (res.retCode !== 0) { console.error("[trader] Bybit buy error:", res.retMsg); return null; }
+    } catch (e) { console.error("[trader] Bybit buy failed:", e.message); return null; }
   }
 
-  const entry = {
-    mode, side: "BUY", signalType,
-    price, quantity, pnl: 0,
-    action: "✅ 已自动下单",
-  };
+  // 绩效记录
+  recordOpen(price, quantity, signalType);
+
+  const entry = { mode, side: "BUY", signalType, price, quantity, pnl: 0, action: "✅ 已自动下单" };
   logTrade(entry);
   return entry;
 }
 
 // ─── 执行卖出 ────────────────────────────────────────────────────────────
 async function executeSell(signalType, reason = "止损") {
-  const price = await getMarketPrice();
+  const price   = await getMarketPrice();
   if (!price) { console.error("[trader] Cannot get price"); return null; }
 
-  const mode     = MODE;
-  const quantity = 0;
-  const sellQty  = mode === "paper" ? paperPosition : 100; // 全卖
+  const mode    = MODE;
 
   if (mode === "paper") {
+    recordClose(price, reason);
     paperPosition = 0;
   } else {
+    recordClose(price, reason);
     try {
       const res = await bybitRequest("POST", "/v5/order/create", {
-        category: "spot",
-        symbol:   "TRUMPUSDT",
-        side:     "Sell",
-        orderType:"Market",
-        qty:      sellQty.toString(),
-        marketUnit: "quote",
+        category: "spot", symbol: "TRUMPUSDT",
+        side: "Sell", orderType: "Market",
+        qty: "100", marketUnit: "quote",
       });
-      if (res.retCode !== 0) {
-        console.error("[trader] Bybit sell error:", res.retMsg);
-        return null;
-      }
-    } catch (e) {
-      console.error("[trader] Bybit sell failed:", e.message);
-      return null;
-    }
+      if (res.retCode !== 0) { console.error("[trader] Bybit sell error:", res.retMsg); return null; }
+    } catch (e) { console.error("[trader] Bybit sell failed:", e.message); return null; }
   }
 
-  const entry = {
-    mode, side: "SELL", signalType,
-    price, quantity, pnl: 0,
-    action: "✅ 已自动卖出",
-  };
+  const entry = { mode, side: "SELL", signalType, price, quantity: 0, pnl: 0, action: "✅ 已自动卖出" };
   logTrade(entry);
   return entry;
 }
 
 // ─── 主执行函数 ──────────────────────────────────────────────────────────
 export async function executeSignal(signalType, currentPosition = 0) {
-  if (MODE !== "paper" && MODE !== "live") {
-    console.warn(`[trader] Unknown mode: ${MODE}, skipping`);
-    return null;
-  }
-
   const targetPos = POSITION_MAP[signalType] ?? 0;
 
-  // 空信号跳过
-  if (targetPos === 0 && signalType !== "SELL_RESONANCE") {
-    console.log(`[trader] No position target for ${signalType}, skipping`);
+  if (targetPos === 0 && signalType !== "SELL_RESONANCE" && signalType !== "STOP_LOSS") {
     return null;
   }
 
-  // SELL_RESONANCE → 全卖
-  if (signalType === "SELL_RESONANCE") {
-    return await executeSell(signalType, "SELL信号");
+  if (signalType === "SELL_RESONANCE" || signalType === "STOP_LOSS") {
+    return await executeSell(signalType, signalType === "STOP_LOSS" ? "止损" : "SELL信号");
   }
 
-  // 止损 → 全卖
-  if (signalType === "STOP_LOSS") {
-    return await executeSell(signalType, "止损");
-  }
-
-  // BUY → 检查是否需要加仓
   const currentPos = MODE === "paper" ? paperPosition : currentPosition;
   if (targetPos <= currentPos) {
     console.log(`[trader] Position ${currentPos}% already >= target ${targetPos}%, skipping`);
@@ -214,12 +173,9 @@ export function formatTradeMessage(entry) {
   );
 }
 
-// ─── 获取交易记录 ────────────────────────────────────────────────────────
-export function getTradeLog() {
-  return tradeLog;
-}
+// ─── 导出 ────────────────────────────────────────────────────────────────
+export { getTradeLog, getStats, formatDailyReport, getHistory, getOpenPositions } from "./performance.js";
 
-// ─── 获取当前仓位 ────────────────────────────────────────────────────────
 export function getPosition() {
   return MODE === "paper" ? paperPosition : 0;
 }
