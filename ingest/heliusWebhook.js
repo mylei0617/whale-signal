@@ -1,4 +1,62 @@
-// ─── heliusWebhook.js ──────────────────────────────────────────────────────
+// ─── Pre-Pump 检测缓存 ───────────────────────────────────────────────────
+let prePumpBuffer = [];       // { wallet, usd, ts }
+let lastPrePumpTs = 0;        // 上次 Pre-Pump 推送时间戳
+
+function checkPrePump(wallet, direction, usd) {
+  const now = Date.now();
+
+  // Step 3: 清理3分钟前的数据
+  prePumpBuffer = prePumpBuffer.filter(item => now - item.ts < 180000);
+
+  // Step 2: BUY 且 $10k < usd < $50k → 记录
+  if (direction === "BUY" && usd > 10000 && usd < 50000) {
+    prePumpBuffer.push({ wallet, usd, ts: now });
+    console.log(`[prePump] Recorded small BUY wallet=${wallet.slice(0,8)} usd=${usd.toLocaleString()}`);
+  }
+
+  // Step 4: 检测模式（≥3钱包 AND 总金额≥$50k）
+  const uniqueWallets = [...new Set(prePumpBuffer.map(b => b.wallet))];
+  const totalUSD = prePumpBuffer.reduce((sum, b) => sum + b.usd, 0);
+  const isPrePump = uniqueWallets.length >= 3 && totalUSD >= 50000;
+
+  if (!isPrePump) return null;
+
+  // Step 7: 60秒防重复
+  if (now - lastPrePumpTs < 60000) {
+    console.log(`[prePump] Cooldown active, skipping`);
+    return null;
+  }
+  lastPrePumpTs = now;
+
+  // Step 5: 评分（Smart钱包 +10）
+  const hasSmart = uniqueWallets.some(w => (walletStats[w]?.winRate || 0.5) > 0.6);
+  const score = hasSmart ? 75 : 65;
+
+  return { wallets: uniqueWallets, totalUSD, score, hasSmart };
+}
+
+function formatPrePump(data) {
+  const { wallets, totalUSD, score, hasSmart } = data;
+  const walletInfo = wallets.map(w => {
+    const short = w.length > 8 ? `${w.slice(0,4)}...${w.slice(-4)}` : w;
+    const rate = Math.round((walletStats[w]?.winRate || 0.5) * 100);
+    const tag = rate > 60 ? "💎" : "";
+    return `${short}（胜率${rate}%）${tag}`;
+  });
+
+  return (
+    `⚡️ *${hasSmart ? "💎Smart " : ""}Pre-Pump 信号*\n\n` +
+    `检测到连续小额买入\n\n` +
+    `钱包数：*${wallets.length}*\n` +
+    `钱包：` + walletInfo.join(`  `) + `\n` +
+    `总金额：*$${totalUSD.toLocaleString("en-US", { maximumFractionDigits: 0 })}*\n\n` +
+    `信号评分：*${score}*\n` +
+    `建议：提前埋伏 5-10%\n\n` +
+    `_${new Date().toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}_`
+  );
+}
+
+
 import { normalize }        from "../core/normalizer.js";
 import { extractFeatures }  from "../core/features.js";
 import { score }            from "../core/scorer.js";
@@ -7,9 +65,7 @@ import { sendMessage, formatSignal } from "../push/telegram.js";
 import {
   walletStats,
   recordSignal,
-  checkSmartResonance,
   formatWinRateInfo,
-  getStats,
   getTrumpPrice,
 } from "../core/smartMoney.js";
 
@@ -52,7 +108,7 @@ function formatResonanceV3(buys, totalScore) {
   const wallets = [...new Set(buys.map(b => b.wallet))];
   const totalUSD = buys.reduce((sum, b) => sum + b.usd, 0);
   const walletInfo = formatWinRateInfo(wallets);
-  const smartTag = checkSmartResonance(wallets) ? "💎 Smart Money" : "";
+  const smartTag = wallets.some(w => (walletStats[w]?.winRate || 0.5) > 0.6) ? "💎 Smart Money" : "";
 
   return (
     `🔥 *${smartTag}Whale共振信号*\n\n` +
@@ -79,7 +135,16 @@ async function processEvent(evt) {
   // 3. 只处理 TRUMP 交易
   if (!features.isTarget) return;
 
-  // 4. 检查共振
+  // 4. 检查 Pre-Pump（优先于共振）
+  const prePump = checkPrePump(tx.wallet, features.direction, tx.usd);
+  if (prePump) {
+    const msg = formatPrePump(prePump);
+    const sent = await sendMessage(msg);
+    if (!sent) console.error("[webhook] Pre-Pump message failed");
+    // 不 return，继续走共振逻辑
+  }
+
+  // 5. 检查共振
   const isResonance = await checkResonance(tx.wallet, features.direction, tx.usd);
 
   // 5. 评分（含胜率加权）
@@ -90,7 +155,7 @@ async function processEvent(evt) {
   if (isResonance) {
     totalScore += 30;
     // 7. Smart Money共振增强（≥2钱包且有高胜率钱包 +20）
-    if (checkSmartResonance([...new Set(recentBuys.map(b => b.wallet))])) {
+    if ([...new Set(recentBuys.map(b => b.wallet))].some(w => (walletStats[w]?.winRate || 0.5) > 0.6)) {
       totalScore += 20;
     }
     console.log(`[webhook] 🔥 RESONANCE DETECTED! score=${totalScore}`);

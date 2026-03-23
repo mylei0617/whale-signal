@@ -46,6 +46,44 @@ app.get("/test-signal", async (req, res) => {
   res.json({ ok: true, message: "Forced BUY signal sent — check Telegram" });
 });
 
+// Test endpoint — simulate 3 wallets small BUY → trigger Pre-Pump
+app.get("/test-prepump", async (req, res) => {
+  const { heliusWebhookHandler } = await import("./ingest/heliusWebhook.js");
+  const WALLET_A = "SmallBuyWallet1111111111111111";
+  const WALLET_B = "SmallBuyWallet2222222222222222";
+  const WALLET_C = "SmallBuyWallet3333333333333333";
+  const { TRUMP_MINT } = await import("./constants.js");
+  const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+  const now = Math.floor(Date.now() / 1000);
+
+  const events = [
+    { signature: "prepumpA" + Date.now(), feePayer: WALLET_A, type: "SWAP", timestamp: now - 60,
+      tokenTransfers: [
+        { fromUserAccount: "USDCVault", toUserAccount: WALLET_A, mint: TRUMP_MINT, tokenAmount: 10000 },
+        { fromUserAccount: WALLET_A, toUserAccount: "TRUMPVault", mint: USDC, tokenAmount: 20000 },
+      ],
+      events: { swap: { nativeInput: { amount: "150000000" } } }, // ~$22,500
+    },
+    { signature: "prepumpB" + Date.now(), feePayer: WALLET_B, type: "SWAP", timestamp: now - 30,
+      tokenTransfers: [
+        { fromUserAccount: "USDCVault", toUserAccount: WALLET_B, mint: TRUMP_MINT, tokenAmount: 10000 },
+        { fromUserAccount: WALLET_B, toUserAccount: "TRUMPVault", mint: USDC, tokenAmount: 20000 },
+      ],
+      events: { swap: { nativeInput: { amount: "150000000" } } }, // ~$22,500
+    },
+    { signature: "prepumpC" + Date.now(), feePayer: WALLET_C, type: "SWAP", timestamp: now,
+      tokenTransfers: [
+        { fromUserAccount: "USDCVault", toUserAccount: WALLET_C, mint: TRUMP_MINT, tokenAmount: 10000 },
+        { fromUserAccount: WALLET_C, toUserAccount: "TRUMPVault", mint: USDC, tokenAmount: 20000 },
+      ],
+      events: { swap: { nativeInput: { amount: "100000000" } } }, // ~$15,000
+    },
+  ];
+
+  await heliusWebhookHandler({ body: events }, { status: () => ({ json: () => {} }) });
+  res.json({ ok: true, message: "Pre-Pump triggered — check Telegram" });
+});
+
 // Test endpoint — simulate 2 different wallets BUY TRUMP → trigger resonance
 app.get("/test-resonance", async (req, res) => {
   const { heliusWebhookHandler } = await import("./ingest/heliusWebhook.js");
