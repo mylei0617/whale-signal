@@ -35,6 +35,42 @@ app.get("/test-signal", async (req, res) => {
   res.json({ ok: true, message: "Forced BUY signal sent — check Telegram" });
 });
 
+// Test endpoint — simulate 2 different wallets BUY TRUMP → trigger resonance
+app.get("/test-resonance", async (req, res) => {
+  const { heliusWebhookHandler } = await import("./ingest/heliusWebhook.js");
+  const WALLET_A = "WhaleWallet11111111111111111111111";
+  const WALLET_B = "WhaleWallet22222222222222222222222";
+  const { TRUMP_MINT } = await import("./constants.js");
+
+  const events = [
+    {
+      signature: "resonanceA" + Date.now(),
+      feePayer:  WALLET_A,
+      type:      "SWAP",
+      timestamp: Math.floor(Date.now() / 1000),
+      tokenTransfers: [
+        { fromUserAccount: "USDCVault", toUserAccount: WALLET_A, mint: TRUMP_MINT, tokenAmount: 100000 },
+        { fromUserAccount: WALLET_A, toUserAccount: "TRUMPVault", mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", tokenAmount: 50000 },
+      ],
+      events: { swap: { nativeInput: { amount: "201000000000" } } }, // 201 SOL ≈ $30,150
+    },
+    {
+      signature: "resonanceB" + Date.now(),
+      feePayer:  WALLET_B,
+      type:      "SWAP",
+      timestamp: Math.floor(Date.now() / 1000),
+      tokenTransfers: [
+        { fromUserAccount: "USDCVault", toUserAccount: WALLET_B, mint: TRUMP_MINT, tokenAmount: 100000 },
+        { fromUserAccount: WALLET_B, toUserAccount: "TRUMPVault", mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", tokenAmount: 50000 },
+      ],
+      events: { swap: { nativeInput: { amount: "201000000000" } } }, // 201 SOL ≈ $30,150
+    },
+  ];
+
+  await heliusWebhookHandler({ body: events }, { status: () => ({ json: () => {} }) });
+  res.json({ ok: true, message: "Resonance triggered — check Telegram" });
+});
+
 // Test endpoint — force a BUY signal directly (bypass scoring)
 app.get("/test", async (req, res) => {
   const { sendMessage, formatSignal } = await import("./push/telegram.js");
