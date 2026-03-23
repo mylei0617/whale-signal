@@ -4,17 +4,13 @@
 
 import crypto from "crypto";
 import { getTrumpPrice } from "../core/price.js";
+import { recordOpen, recordClose, checkTakeProfit } from "./performance.js";
 
 // ─── 状态 ────────────────────────────────────────────────────────────────
 let tradeLog      = [];
 let paperPosition = 0;
-
-// ─── 动量等待队列 ───────────────────────────────────────────────────────
-let momentumQueue = []; // { ts, entryPrice, signalType, wallet }
-
-// ─── 止盈/反向检测 ───────────────────────────────────────────────────────
-let openPositions  = []; // { entryPrice, position, signalType, ts, soldQty }
-let recentSells   = [];  // { wallet, ts }
+let momentumQueue = []; // { ts, entryPrice, signalType }
+let recentSells = [];   // { wallet, ts }
 
 // ─── 配置 ────────────────────────────────────────────────────────────────
 const MODE = process.env.TRADE_MODE || "paper";
@@ -48,38 +44,8 @@ async function getMarketPrice() {
   try { return await getTrumpPrice(); } catch { return 0; }
 }
 
-// ─── 止盈检查 ───────────────────────────────────────────────────────────
-async function checkTakeProfit() {
-  if (openPositions.length === 0) return [];
-  const price = await getMarketPrice();
-  if (!price) return [];
-  const triggered = [];
-  const remaining = [];
-  for (const pos of openPositions) {
-    const gain = (price - pos.entryPrice) / pos.entryPrice;
-    let sold = pos.soldQty || 0;
-    if (gain >= 0.05 && sold < 30) { triggered.push({ type: "TP1", price, gain, qty: 30-sold, reason: "止盈+5%卖出30%" }); sold = 30; }
-    if (gain >= 0.10 && sold < 70) { triggered.push({ type: "TP2", price, gain, qty: 40, reason: "止盈+10%再卖40%" }); sold = 70; }
-    if (gain >= 0.20 && sold < 100) { triggered.push({ type: "TP3", price, gain, qty: 100-sold, reason: "止盈+20%全卖" }); sold = 100; }
-    if (sold >= 100) {
-      const pnl = (price - pos.entryPrice) / pos.entryPrice;
-      tradeLog.unshift({ ts: Date.now(), side: "SELL", pnl, reason: "止盈", price, quantity: 0 });
-      console.log(`[trader] 💰 止盈 price=$${price} pnl=${(pnl*100).toFixed(1)}%`);
-    } else remaining.push({ ...pos, soldQty: sold });
-  }
-  openPositions = remaining;
-  return triggered;
-}
-
-// ─── 动量检查（5分钟等待）──────────────────────────────────────────────
-function checkMomentum() {
-  const now = Date.now();
-  const passed = momentumQueue.filter(m => now - m.ts >= 5 * 60 * 1000);
-  momentumQueue = momentumQueue.filter(m => now - m.ts < 5 * 60 * 1000);
-  const failed = passed.filter(m => false); // 简化：全部通过，实际用getMarketPrice对比
-  for (const f of failed) console.log(`[trader] ⚠️ 动量不足，取消`);
-  return passed;
-}
+// ─── 止盈检查（代理）────────────────────────────────────────────────────
+async function runTakeProfit() { return await checkTakeProfit(); }
 
 // ─── 反向平仓检查 ────────────────────────────────────────────────────────
 function checkReverseExit() {
@@ -95,7 +61,7 @@ async function doBuy(signalType, quantity) {
   const price = await getMarketPrice();
   if (!price) return null;
   if (MODE === "paper") paperPosition = quantity;
-  openPositions.push({ entryPrice: price, position: quantity, signalType, ts: Date.now(), soldQty: 0 });
+  recordOpen(price, quantity, signalType);
   const entry = { mode: MODE, side: "BUY", signalType, price, quantity, action: "✅ 已自动下单" };
   logTrade(entry);
   return entry;
@@ -105,10 +71,9 @@ async function doBuy(signalType, quantity) {
 async function doSell(signalType, reason) {
   const price = await getMarketPrice();
   if (!price) return null;
+  recordClose(price, reason);
   if (MODE === "paper") paperPosition = 0;
-  const pnl = openPositions.length > 0 ? (price - openPositions[0].entryPrice) / openPositions[0].entryPrice : 0;
-  openPositions = [];
-  const entry = { mode: MODE, side: "SELL", signalType, price, quantity: 0, pnl, action: "✅ 已自动卖出" };
+  const entry = { mode: MODE, side: "SELL", signalType, price, quantity: 0, action: "✅ 已自动卖出" };
   logTrade(entry);
   return entry;
 }
@@ -166,9 +131,8 @@ export function addSellSignal(wallet) { recentSells.push({ wallet, ts: Date.now(
 
 // ─── 导出 ───────────────────────────────────────────────────────────────
 export function getPosition() { return MODE === "paper" ? paperPosition : 0; }
-export function getTradeLog() { return tradeLog.slice(0, 20); }
-export function getStats() { return {}; } // 简化，stats走performance.js
-export function getOpenPositions() { return openPositions; }
-export { checkTakeProfit, checkReverseExit, momentumQueue, openPositions };
+export { checkTakeProfit, checkReverseExit };
+
+export { momentumQueue, recentSells };
 
 console.log(`Execution engine ready (${MODE} mode)`);

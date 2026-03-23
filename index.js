@@ -252,8 +252,7 @@ app.listen(PORT, () => {
   // 后台任务：每60秒检查止盈+动量确认
   setInterval(async () => {
     try {
-      const { checkTakeProfit, executeSignal, formatTakeProfitMessage, sendMessage, getPosition } = await import("./execution/trader.js");
-      const { momentumQueue } = await import("./execution/trader.js");
+      const { checkTakeProfit, executeSignal, formatTakeProfitMessage, sendMessage, getPosition, momentumQueue } = await import("./execution/trader.js");
       const now = Date.now();
       // 止盈检查
       const tp = await checkTakeProfit();
