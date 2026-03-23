@@ -152,6 +152,12 @@ async function processEvent(evt) {
   // 3. 只处理 TRUMP 交易
   if (!features.isTarget) return;
 
+  // 3b. 过滤无效 amount
+  if (!tx.usd || tx.usd <= 0) {
+    console.log(`[webhook] Skipping: usd=${tx.usd} <= 0`);
+    return;
+  }
+
   // 4. 检查 Pre-Pump（独立通道，不走阈值，直接推送）
   const prePump = checkPrePump(tx.wallet, features.direction, tx.usd);
   if (prePump) {
