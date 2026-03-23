@@ -19,32 +19,49 @@ app.get("/health", (req, res) => {
 // Helius webhook endpoint
 app.post("/webhook/helius", heliusWebhookHandler);
 
+// Test endpoint — force send a BUY signal
+app.get("/test-signal", async (req, res) => {
+  const { sendMessage, formatSignal } = await import("./push/telegram.js");
+  const signal = formatSignal({
+    wallet:    "WhaleWallet1234567890abcdef",
+    direction: "BUY",
+    amountUSD: 5000000000,
+    score:     85,
+    level:     "BUY",
+    action:    "建仓10%",
+    tx:        "mockSig" + Date.now(),
+  });
+  await sendMessage(signal);
+  res.json({ ok: true, message: "Forced BUY signal sent — check Telegram" });
+});
+
 // Test endpoint — simulate a TRUMP BUY event
 app.get("/test", async (req, res) => {
   const { TRUMP_MINT } = await import("./constants.js");
 
+  const WALLET = "WhaleWallet1234567890abcdef";
   const mockEvent = {
     signature: "mockSig" + Date.now(),
-    feePayer:  "WhaleWallet1234567890abcdef",
+    feePayer:  WALLET,
     type:      "SWAP",
     timestamp: Math.floor(Date.now() / 1000),
     tokenTransfers: [
       {
         fromUserAccount: "USDCVault1234",
-        toUserAccount:   "WhaleWallet1234567890abcdef",
-        mint:            TRUMP_MINT,
-        tokenAmount:     500000,
+        toUserAccount:   WALLET,
+        mint:            "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", // USDC
+        tokenAmount:     50000,
       },
       {
-        fromUserAccount: "WhaleWallet1234567890abcdef",
-        toUserAccount:   "USDCVault1234",
-        mint:            "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", // USDC
-        tokenAmount:     75000,
+        fromUserAccount: WALLET,
+        toUserAccount:   "TRUMPVault9999",
+        mint:            TRUMP_MINT,
+        tokenAmount:     500000,
       },
     ],
     events: {
       swap: {
-        nativeInput: { amount: "500000000" }, // 0.5 SOL in lamports
+        nativeInput: { amount: "2000000000" }, // 2 SOL ≈ $300
       },
     },
   };
