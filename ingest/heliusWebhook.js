@@ -62,11 +62,11 @@ import { extractFeatures }  from "../core/features.js";
 import { score }            from "../core/scorer.js";
 import { decide }           from "../strategy/rules.js";
 import { sendMessage, formatSignal } from "../push/telegram.js";
+import { getTrumpPrice }       from "../core/price.js";
 import {
   walletStats,
   recordSignal,
   formatWinRateInfo,
-  getTrumpPrice,
 } from "../core/smartMoney.js";
 
 // ─── Whale 共振检测缓存 ───────────────────────────────────────────────────
