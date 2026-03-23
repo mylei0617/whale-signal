@@ -73,6 +73,7 @@ import { extractFeatures }  from "../core/features.js";
 import { score }            from "../core/scorer.js";
 import { decide }           from "../strategy/rules.js";
 import { sendMessage, formatSignal } from "../push/telegram.js";
+import { executeSignal, formatTradeMessage, getPosition } from "../execution/trader.js";
 import { getTrumpPrice }       from "../core/price.js";
 import { formatPositionInfo, recordEntry, checkStopLoss } from "../core/positionManager.js";
 import {
@@ -155,6 +156,11 @@ async function processEvent(evt) {
     const signalType = prePump.hasTierS ? "PRE_PUMP_TIER_S" : prePump.hasTierA ? "PRE_PUMP_TIER_A" : "PRE_PUMP";
     const msg = formatPrePump(prePump) + formatPositionInfo(signalType, prePump.score);
     const sent = await sendMessage(msg);
+    // 自动交易
+    const trade = await executeSignal(signalType, getPosition());
+    if (trade) {
+      await sendMessage(formatTradeMessage(trade));
+    }
     if (!sent) console.error("[webhook] Pre-Pump message failed");
     // 继续走共振逻辑（可能同时触发共振）
   }
@@ -198,6 +204,10 @@ async function processEvent(evt) {
       if (risk.triggered) {
         const riskMsg = `\n─────────────\n${risk.message}`;
         await sendMessage(riskMsg);
+        const trade = await executeSignal("STOP_LOSS", getPosition());
+        if (trade) {
+          await sendMessage(formatTradeMessage(trade));
+        }
         if (risk.systemPause) return; // 系统暂停，停止本次推送
       }
     }
@@ -208,6 +218,11 @@ async function processEvent(evt) {
     const signalType = isSmart ? "SMART_RESONANCE" : "RESONANCE";
     const resonanceMsg = formatResonanceV3(recentBuys, totalScore) + formatPositionInfo(signalType, totalScore);
     const sent = await sendMessage(resonanceMsg);
+    // 自动交易
+    const trade = await executeSignal(signalType, getPosition());
+    if (trade) {
+      await sendMessage(formatTradeMessage(trade));
+    }
     if (!sent) console.error("[webhook] Failed to send resonance message");
     return;
   }
@@ -225,6 +240,13 @@ async function processEvent(evt) {
     level:      decision.level,
     action:     decision.action,
   }) + (features.direction === "SELL" ? formatPositionInfo("SELL_RESONANCE", totalScore) : "");
+  // 自动交易（SELL信号）
+  if (features.direction === "SELL") {
+    const trade = await executeSignal("SELL_RESONANCE", getPosition());
+    if (trade) {
+      await sendMessage(formatTradeMessage(trade));
+    }
+  }
 
   const sent = await sendMessage(message);
   if (!sent) console.error("[webhook] Failed to send Telegram message");

@@ -91,6 +91,14 @@ app.get("/test-prepump", async (req, res) => {
   res.json({ ok: true, message: "Pre-Pump triggered (3 wallets seeded with winRate ≥ 0.55) — check Telegram" });
 });
 
+// Test endpoint — simulate auto trade execution (paper mode)
+app.get("/test-trade", async (req, res) => {
+  const { executeSignal, formatTradeMessage, getTradeLog, getPosition } = await import("./execution/trader.js");
+  const result = await executeSignal("RESONANCE", 0);
+  const msg = formatTradeMessage(result);
+  res.json({ ok: true, mode: "paper", trade: result, position: getPosition(), log: getTradeLog().slice(0,3) });
+});
+
 // Test endpoint — simulate Tier S + Tier B wallets → trigger resonance with high score
 app.get("/test-tier", async (req, res) => {
   const { walletStats, TIER_MAP } = await import("./core/smartMoney.js");
