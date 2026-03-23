@@ -18,7 +18,8 @@ app.get("/health", (req, res) => {
 
 app.get("/stats", async (req, res) => {
   const { walletStats } = await import("./core/smartMoney.js");
-  const { getStats: perfStats, getTradeLog, getPosition } = await import("./execution/trader.js");
+  const { getStats: perfStats, getTradeLog, getPosition } = await import("./execution/performance.js");
+  const { getPosition: getTradePos } = await import("./execution/trader.js");
 
   const walletEntries = Object.entries(walletStats).map(([wallet, s]) => ({
     wallet: wallet.slice(0,8) + "...",
@@ -33,7 +34,7 @@ app.get("/stats", async (req, res) => {
 
   res.json({
     ok: true,
-    currentPosition: getPosition() + "%",
+    currentPosition: getTradePos() + "%",
     performance: perf,
     wallets: walletEntries,
   });
