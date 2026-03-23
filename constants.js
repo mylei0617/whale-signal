@@ -7,6 +7,6 @@ export const SIGNAL_LEVELS = {
 };
 
 export const SCORE_THRESHOLDS = {
-  BUY_SIGNAL:  50,
+  BUY_SIGNAL:  70,  // 单笔 BUY(50) 不触发，共振(80)才触发，Smart共振(100)更强
   SELL_SIGNAL: -50,
 };

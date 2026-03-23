@@ -17,8 +17,8 @@ export function score(features) {
     let total = 0;
 
     // Direction score
-    if (direction === "BUY")  total += 30;
-    if (direction === "SELL") total -= 30;
+    if (direction === "BUY")  total += 50;
+    if (direction === "SELL") total -= 50;
 
     // Size bonus: large transactions carry more weight
     if ((Number(sizeScore) || 0) > 0.5) total += 20;
