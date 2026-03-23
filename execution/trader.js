@@ -209,6 +209,7 @@ export function formatTradeMessage(entry) {
     `仓位：${entry.side === "BUY" ? `${entry.quantity}%` : "全部"}\n` +
     `价格：$${entry.price}\n` +
     `模式：${entry.mode === "paper" ? "📝 Paper模拟" : "💰 实盘"}\n` +
+    `当前仓位：${getPosition()}%\n` +
     `_${now()}_`
   );
 }

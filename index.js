@@ -23,8 +23,22 @@ app.get("/stats", async (req, res) => {
     totalTrades: s.totalTrades,
     wins: s.wins,
     winRate: Math.round(s.winRate * 100) + "%",
+    tier: s.tier,
   }));
   res.json({ ok: true, wallets: entries, count: entries.length });
+});
+
+app.get("/trades", async (req, res) => {
+  const { getTradeLog, getPosition } = await import("./execution/trader.js");
+  const log = getTradeLog().slice(0, 20).map(t => ({
+    ts: new Date(t.ts).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" }),
+    side: t.side,
+    signal: t.signalType,
+    price: `$${t.price}`,
+    qty: t.quantity ? `${t.quantity}%` : "-",
+    mode: t.mode,
+  }));
+  res.json({ ok: true, currentPosition: getPosition() + "%", trades: log });
 });
 
 // Helius webhook endpoint
