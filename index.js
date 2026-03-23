@@ -35,44 +35,21 @@ app.get("/test-signal", async (req, res) => {
   res.json({ ok: true, message: "Forced BUY signal sent — check Telegram" });
 });
 
-// Test endpoint — simulate a TRUMP BUY event
+// Test endpoint — force a BUY signal directly (bypass scoring)
 app.get("/test", async (req, res) => {
-  const { TRUMP_MINT } = await import("./constants.js");
-
+  const { sendMessage, formatSignal } = await import("./push/telegram.js");
   const WALLET = "WhaleWallet1234567890abcdef";
-  const mockEvent = {
-    signature: "mockSig" + Date.now(),
-    feePayer:  WALLET,
-    type:      "SWAP",
-    timestamp: Math.floor(Date.now() / 1000),
-    tokenTransfers: [
-      {
-        fromUserAccount: "USDCVault1234",
-        toUserAccount:   WALLET,
-        mint:            "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", // USDC
-        tokenAmount:     50000,
-      },
-      {
-        fromUserAccount: WALLET,
-        toUserAccount:   "TRUMPVault9999",
-        mint:            TRUMP_MINT,
-        tokenAmount:     500000,
-      },
-    ],
-    events: {
-      swap: {
-        nativeInput: { amount: "2000000000" }, // 2 SOL ≈ $300
-      },
-    },
-  };
-
-  console.log("[test] Injecting mock TRUMP BUY event...");
-  await heliusWebhookHandler(
-    { body: [mockEvent] },
-    { status: () => ({ json: () => {} }) }
-  );
-
-  res.json({ ok: true, message: "Mock event injected — check Telegram" });
+  const signal = formatSignal({
+    wallet:    WALLET,
+    direction: "BUY",
+    amountUSD: 8000000,
+    score:     55,
+    level:     "BUY",
+    action:    "建仓10%",
+    tx:        "mockSig" + Date.now(),
+  });
+  await sendMessage(signal);
+  res.json({ ok: true, message: "BUY signal sent — check Telegram" });
 });
 
 // 404 fallback
