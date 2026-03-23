@@ -2,4 +2,4 @@
 
 TRUMP meme coin signal bot.
 
-*Rebuild: fixed startup IIFE syntax*
+*Clean rewrite - Railway will start and send Telegram message on boot*
