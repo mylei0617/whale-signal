@@ -2,4 +2,4 @@
 
 TRUMP meme coin signal bot.
 
-*Debug: checking Telegram env vars*
+*Debug v2 - Telegram env check*
