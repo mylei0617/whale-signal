@@ -249,4 +249,24 @@ app.listen(PORT, () => {
   console.log(`  Telegram configured   : ${process.env.TELEGRAM_BOT_TOKEN ? "yes" : "NO — set TELEGRAM_BOT_TOKEN"}`);
   console.log("=".repeat(50));
   console.log("Whale signal system V1 ready");
+  // 后台任务：每60秒检查止盈+动量确认
+  setInterval(async () => {
+    try {
+      const { checkTakeProfit, executeSignal, formatTakeProfitMessage, sendMessage, getPosition } = await import("./execution/trader.js");
+      const { momentumQueue } = await import("./execution/trader.js");
+      const now = Date.now();
+      // 止盈检查
+      const tp = await checkTakeProfit();
+      if (tp.length > 0) {
+        await sendMessage(formatTakeProfitMessage(tp));
+        console.log(`[bg] 止盈触发: ${tp.length}笔`);
+      }
+      // 动量确认（5分钟等待）
+      const toExec = momentumQueue.filter(m => now - m.ts >= 5 * 60 * 1000);
+      if (toExec.length > 0) {
+        console.log(`[bg] 动量确认: ${toExec.length}笔，执行BUY`);
+        for (const m of toExec) await executeSignal(m.signalType, getPosition());
+      }
+    } catch(e) { console.error("[bg] Error:", e.message); }
+  }, 60 * 1000);
 });

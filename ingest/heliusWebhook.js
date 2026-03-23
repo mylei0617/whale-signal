@@ -73,7 +73,7 @@ import { extractFeatures }  from "../core/features.js";
 import { score }            from "../core/scorer.js";
 import { decide }           from "../strategy/rules.js";
 import { sendMessage, formatSignal } from "../push/telegram.js";
-import { executeSignal, formatTradeMessage, getPosition } from "../execution/trader.js";
+import { executeSignal, formatTradeMessage, getPosition, addSellSignal } from "../execution/trader.js";
 import { getTrumpPrice }       from "../core/price.js";
 import { formatPositionInfo, recordEntry, checkStopLoss } from "../core/positionManager.js";
 import {
@@ -270,6 +270,7 @@ async function processEvent(evt) {
   }) + (features.direction === "SELL" ? formatPositionInfo("SELL_RESONANCE", totalScore) : "");
   // 自动交易（SELL信号）
   if (features.direction === "SELL") {
+    addSellSignal(tx.wallet); // 记录用于反向平仓检测
     const trade = await executeSignal("SELL_RESONANCE", getPosition());
     if (trade) {
       await sendMessage(formatTradeMessage(trade));
