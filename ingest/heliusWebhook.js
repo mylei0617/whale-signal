@@ -21,6 +21,13 @@ function checkPrePump(wallet, direction, usd) {
 
   if (!isPrePump) return null;
 
+  // 过滤条件：至少1个钱包 winRate ≥ 0.55
+  const highWinRateCount = uniqueWallets.filter(w => (walletStats[w]?.winRate || 0.5) >= 0.55).length;
+  if (highWinRateCount < 1) {
+    console.log(`[prePump] Filtered: no wallet with winRate ≥ 0.55 (wallets=${uniqueWallets.length})`);
+    return null;
+  }
+
   // Step 7: 60秒防重复
   if (now - lastPrePumpTs < 60000) {
     console.log(`[prePump] Cooldown active, skipping`);
@@ -28,30 +35,36 @@ function checkPrePump(wallet, direction, usd) {
   }
   lastPrePumpTs = now;
 
-  // Step 5: 评分（Smart钱包 +10）
-  const hasSmart = uniqueWallets.some(w => (walletStats[w]?.winRate || 0.5) > 0.6);
-  const score = hasSmart ? 75 : 65;
+  // 增强：≥2个高胜率钱包 → 高质量 Pre-Pump
+  const highQualityCount = uniqueWallets.filter(w => (walletStats[w]?.winRate || 0.5) >= 0.6).length;
+  const isHighQuality = highQualityCount >= 2;
 
-  return { wallets: uniqueWallets, totalUSD, score, hasSmart };
+  // 评分
+  const score = isHighQuality ? 75 : 65;
+
+  return { wallets: uniqueWallets, totalUSD, score, highWinRateCount, highQualityCount, isHighQuality };
 }
 
 function formatPrePump(data) {
-  const { wallets, totalUSD, score, hasSmart } = data;
+  const { wallets, totalUSD, score, highWinRateCount, isHighQuality } = data;
   const walletInfo = wallets.map(w => {
     const short = w.length > 8 ? `${w.slice(0,4)}...${w.slice(-4)}` : w;
     const rate = Math.round((walletStats[w]?.winRate || 0.5) * 100);
-    const tag = rate > 60 ? "💎" : "";
+    const tag = rate >= 60 ? "💎" : "";
     return `${short}（胜率${rate}%）${tag}`;
   });
 
+  const prefix = isHighQuality ? "🔥 " : "";
+
   return (
-    `⚡️ *${hasSmart ? "💎Smart " : ""}Pre-Pump 信号*\n\n` +
+    `⚡️ *${prefix}Pre-Pump 信号（过滤后）*\n\n` +
     `检测到连续小额买入\n\n` +
     `钱包数：*${wallets.length}*\n` +
     `钱包：` + walletInfo.join(`  `) + `\n` +
+    `高胜率钱包：*${highWinRateCount}*\n` +
     `总金额：*$${totalUSD.toLocaleString("en-US", { maximumFractionDigits: 0 })}*\n\n` +
     `信号评分：*${score}*\n` +
-    `建议：提前埋伏 5-10%\n\n` +
+    `建议：小仓试探（5%）\n\n` +
     `_${new Date().toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}_`
   );
 }
