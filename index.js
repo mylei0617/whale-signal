@@ -16,6 +16,17 @@ app.get("/health", (req, res) => {
   res.json({ ok: true, service: "whale-signal-v1", ts: new Date().toISOString() });
 });
 
+app.get("/stats", async (req, res) => {
+  const { walletStats } = await import("./core/smartMoney.js");
+  const entries = Object.entries(walletStats).map(([wallet, s]) => ({
+    wallet: wallet.slice(0,8) + "...",
+    totalTrades: s.totalTrades,
+    wins: s.wins,
+    winRate: Math.round(s.winRate * 100) + "%",
+  }));
+  res.json({ ok: true, wallets: entries, count: entries.length });
+});
+
 // Helius webhook endpoint
 app.post("/webhook/helius", heliusWebhookHandler);
 
