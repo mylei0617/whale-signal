@@ -135,13 +135,13 @@ async function processEvent(evt) {
   // 3. 只处理 TRUMP 交易
   if (!features.isTarget) return;
 
-  // 4. 检查 Pre-Pump（优先于共振）
+  // 4. 检查 Pre-Pump（独立通道，不走阈值，直接推送）
   const prePump = checkPrePump(tx.wallet, features.direction, tx.usd);
   if (prePump) {
     const msg = formatPrePump(prePump);
     const sent = await sendMessage(msg);
     if (!sent) console.error("[webhook] Pre-Pump message failed");
-    // 不 return，继续走共振逻辑
+    // 继续走共振逻辑（可能同时触发共振）
   }
 
   // 5. 检查共振
