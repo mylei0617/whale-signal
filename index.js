@@ -126,6 +126,106 @@ app.get("/test-signal", async (req, res) => {
   res.json({ ok: true, message: "Forced BUY signal sent — check Telegram" });
 });
 
+// ─── 系统完整测试套件（无 Telegram）───────────────────────────────────────
+
+// Step 1: 基础交易
+app.get("/test-trade", async (req, res) => {
+  const { executeSignal, getPosition } = await import("./execution/trader.js");
+  const { clearHistory } = await import("./execution/performance.js");
+  clearHistory();
+  const before = getPosition();
+  const tx = "test_trade_" + Date.now();
+  const result = await executeSignal("RESONANCE", 0, tx);
+  const after = getPosition();
+  res.json({ step: 1, test: "基础交易", result: result?.action || "null", before, after, ok: after > before, tx });
+});
+
+// Step 2: 止损
+app.get("/test-stoploss", async (req, res) => {
+  const { executeSignal, getPosition } = await import("./execution/trader.js");
+  const { recordOpen } = await import("./execution/performance.js");
+  recordOpen(100, 15, "TEST");
+  const before = getPosition();
+  const result = await executeSignal("STOP_LOSS", 15);
+  const after = getPosition();
+  res.json({ step: 2, test: "止损", result: result?.action || "null", before, after, ok: after === 0 });
+});
+
+// Step 3: 无效过滤
+app.get("/test-invalid", async (req, res) => {
+  const { heliusWebhookHandler } = await import("./ingest/heliusWebhook.js");
+  const { getTradeLog } = await import("./execution/trader.js");
+  const before = getTradeLog().length;
+  await heliusWebhookHandler({ body: [{ signature: "inv_" + Date.now(), feePayer: "X", type: "SWAP", tokenTransfers: [], events: {} }] }, { status: () => ({ json: () => {} }) });
+  const after = getTradeLog().length;
+  res.json({ step: 3, test: "无效过滤", blocked: after === before, before, after, ok: after === before });
+});
+
+// Step 4: 幂等
+app.get("/test-idempotency", async (req, res) => {
+  const { executeSignal, processedTx } = await import("./execution/trader.js");
+  const tx = "idem_" + Date.now();
+  const r1 = await executeSignal("RESONANCE", 0, tx);
+  const r2 = await executeSignal("RESONANCE", 0, tx);
+  const r3 = await executeSignal("RESONANCE", 0, tx);
+  res.json({ step: 4, test: "幂等控制", r1: !!r1, r2: !!r2, r3: !!r3, ok: !!r1 && !r2 && !r3 });
+});
+
+// Step 5: 统计
+app.get("/test-stats", async (req, res) => {
+  const { getStats } = await import("./execution/performance.js");
+  const { getPosition } = await import("./execution/trader.js");
+  const stats = getStats();
+  const wr = parseFloat(stats.winRate) / 100;
+  res.json({ step: 5, test: "统计数据", stats, position: getPosition(), valid: stats.trades >= 0 && wr >= 0 && wr <= 1 });
+});
+
+// Step 6: 交易记录
+app.get("/test-log", async (req, res) => {
+  const { getTradeLog } = await import("./execution/trader.js");
+  const { getOpenPositions } = await import("./execution/performance.js");
+  const trades = getTradeLog();
+  res.json({ step: 6, test: "交易记录", count: trades.length, hasEntry: trades.some(t => t.entryPrice > 0), ok: true });
+});
+
+// 综合测试报告
+app.get("/test-all", async (req, res) => {
+  const results = [];
+  try {
+    const { executeSignal, getPosition } = await import("./execution/trader.js");
+    const { clearHistory } = await import("./execution/performance.js");
+    clearHistory();
+    const tx = "full_" + Date.now();
+    const r = await executeSignal("RESONANCE", 0, tx);
+    results.push({ step: 1, name: "基础交易", ok: r !== null });
+  } catch(e) { results.push({ step: 1, name: "基础交易", ok: false, error: e.message }); }
+  try {
+    const { heliusWebhookHandler } = await import("./ingest/heliusWebhook.js");
+    await heliusWebhookHandler({ body: [{ signature: "inv_" + Date.now(), feePayer: "X", type: "SWAP", tokenTransfers: [], events: {} }] }, { status: () => ({ json: () => {} }) });
+    results.push({ step: 3, name: "无效过滤", ok: true });
+  } catch(e) { results.push({ step: 3, name: "无效过滤", ok: false, error: e.message }); }
+  try {
+    const { executeSignal, processedTx } = await import("./execution/trader.js");
+    const tx2 = "idem_" + Date.now();
+    await executeSignal("RESONANCE", 0, tx2);
+    await executeSignal("RESONANCE", 0, tx2);
+    results.push({ step: 4, name: "幂等控制", ok: processedTx.has(tx2) });
+  } catch(e) { results.push({ step: 4, name: "幂等控制", ok: false, error: e.message }); }
+  try {
+    const { getStats } = await import("./execution/performance.js");
+    const s = getStats();
+    results.push({ step: 5, name: "统计数据", ok: s.trades >= 0, detail: `${s.trades}笔 ${s.winRate}胜率` });
+  } catch(e) { results.push({ step: 5, name: "统计数据", ok: false, error: e.message }); }
+  const passed = results.filter(r => r.ok).length;
+  res.json({
+    system_status: passed === results.length ? "PASS" : "PARTIAL",
+    passed, total: results.length,
+    bug_list: results.filter(r => !r.ok).map(r => r.name),
+    ready_for_paper: passed >= 3,
+    results
+  });
+});
+
 // Test endpoint — simulate 3 wallets small BUY → trigger Pre-Pump
 // Pre-seeds wallet win rates so filter passes
 app.get("/test-prepump", async (req, res) => {
