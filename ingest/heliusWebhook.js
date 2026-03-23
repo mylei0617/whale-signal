@@ -234,7 +234,7 @@ async function processEvent(evt) {
     debug(false, `score=${totalScore} < 30 (below threshold)`);
   }
   // 记录建仓价格用于风控，momentum确认后自动执行
-  if (features.direction === "BUY" && (isResonance || prePump || totalScore >= 70)) {
+  if (features.direction === "BUY" && (isResonance || prePump || totalScore >= 10)) {
     let price;
     try { price = await getTrumpPrice(); } catch { price = 0; }
     if (price > 0) {
