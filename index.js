@@ -153,4 +153,15 @@ setInterval(async () => {
   } catch(e) { console.error('[bg] Error:', e.message); }
 }, 60 * 1000);
 
+
+app.get('/debug-tg', async (req, res) => {
+  const { BOT_TOKEN, CHAT_ID } = process.env;
+  res.json({
+    hasToken: !!BOT_TOKEN,
+    hasChatId: !!CHAT_ID,
+    tokenPrefix: BOT_TOKEN ? BOT_TOKEN.slice(0, 10) + '...' : 'MISSING',
+    chatId: CHAT_ID || 'MISSING',
+  });
+});
+
 app.listen(PORT, () => { console.log('Whale signal system V1 ready'); console.log('Listening on port : ' + PORT); });
