@@ -39,17 +39,72 @@ app.get("/stats", async (req, res) => {
   });
 });
 
+app.get("/dashboard", async (req, res) => {
+  const { getTradeLog, getPosition } = await import("./execution/trader.js");
+  const { getOpenPositions: getPerfOpen, getStats } = await import("./execution/performance.js");
+  const { walletStats } = await import("./core/smartMoney.js");
+
+  const pos = getPosition();
+  const stats = getStats();
+  const open = getPerfOpen();
+  const trades = getTradeLog().slice(0, 20);
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Whale Signal Dashboard</title>
+<style>
+body{font-family:Arial;background:#0a0a1a;color:#fff;padding:20px;max-width:900px;margin:0 auto}
+h1{color:#00d4ff;border-bottom:1px solid #333;padding-bottom:10px}
+.card{background:#1a1a3a;border-radius:12px;padding:20px;margin:15px 0}
+.row{display:flex;gap:15px;flex-wrap:wrap}
+.stat{background:#222;padding:15px;border-radius:8px;min-width:120px;text-align:center}
+.big{font-size:2em;color:#00d4ff}
+.green{color:#00ff88}.red{color:#ff4444}.yellow{color:#ffdd00}
+table{width:100%;border-collapse:collapse;margin-top:10px}
+th,td{padding:8px;border-bottom:1px solid #333;text-align:left}
+th{color:#888}
+</style></head><body>
+<h1>🐋 Whale Signal Dashboard</h1>
+<div class="card">
+  <h2>📊 当前状态</h2>
+  <div class="row">
+    <div class="stat"><div class="big ${pos > 0 ? 'green' : ''}">${pos}%</div><div>当前仓位</div></div>
+    <div class="stat"><div class="big">${stats.trades}</div><div>总交易</div></div>
+    <div class="stat"><div class="big ${stats.winRate > '50%' ? 'green' : 'red'}">${stats.winRate}</div><div>胜率</div></div>
+    <div class="stat"><div class="big ${(stats.totalPnl||'0%').startsWith('-') ? 'red' : 'green'}">${stats.totalPnl}</div><div>总收益</div></div>
+    <div class="stat"><div class="big yellow">${stats.profitFactor}</div><div>盈亏比</div></div>
+  </div>
+</div>
+${open.length > 0 ? `<div class="card"><h2>📋 开仓中</h2><table><tr><th>入场价</th><th>仓位</th><th>信号</th><th>持仓时间</th></tr>` +
+open.map(o => `<tr><td class="green">$${o.entryPrice}</td><td>${o.position}%</td><td>${o.signalType}</td><td>${Math.round((Date.now()-o.ts)/60000)}分钟</td></tr>`).join('') + `</table></div>` : ''}
+<div class="card"><h2>📜 最近交易</h2>
+<table><tr><th>时间</th><th>方向</th><th>价格</th><th>盈亏</th><th>原因</th></tr>${
+trades.map(t => `<tr><td>${new Date(t.ts).toLocaleString('zh-CN')}</td><td class="${t.side==='BUY'?'green':'red'}">${t.side}</td><td>$${t.price}</td><td class="${(t.pnl||0)>=0?'green':'red'}">${t.pnl ? (t.pnl*100).toFixed(1)+'%' : '-'}</td><td>${t.reason||t.signalType||''}</td></tr>`).join('')
+}</table></div>
+<div class="card"><h2>👛 钱包追踪</h2><table><tr><th>钱包</th><th>Tier</th><th>胜率</th><th>交易数</th><th>平均收益</th></tr>${
+Object.entries(walletStats).slice(0,10).map(([w,s]) => `<tr><td>${w.slice(0,8)}...</td><td>${s.tier||'B'}</td><td>${s.totalTrades >= 30 ? (s.winRate*100).toFixed(0)+'%' : '⚠️'+s.totalTrades+'/'}</td><td>${s.totalTrades}</td><td>${s.avgProfit ? (s.avgProfit*100).toFixed(1)+'%' : '-'}</td></tr>`).join('')
+}</table></div></body></html>`;
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.send(html);
+});
+
 app.get("/trades", async (req, res) => {
   const { getTradeLog, getPosition } = await import("./execution/trader.js");
+  const { getOpenPositions: getPerfOpen } = await import("./execution/performance.js");
   const log = getTradeLog().slice(0, 20).map(t => ({
     ts: new Date(t.ts).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" }),
     side: t.side,
     signal: t.signalType,
     price: `$${t.price}`,
     qty: t.quantity ? `${t.quantity}%` : "-",
-    mode: t.mode,
+    pnl: t.pnl ? `${(t.pnl*100).toFixed(1)}%` : "-",
   }));
-  res.json({ ok: true, currentPosition: getPosition() + "%", trades: log });
+  const open = getPerfOpen().map(o => ({
+    entryPrice: `$${o.entryPrice}`,
+    position: `${o.position}%`,
+    signal: o.signalType,
+    holding: `${Math.round((Date.now() - o.ts) / 60000)}分钟`,
+    gain: o.soldQty !== undefined ? `${o.soldQty}%` : "-",
+  }));
+  res.json({ ok: true, currentPosition: getPosition() + "%", openPositions: open, trades: log });
 });
 
 // Helius webhook endpoint
