@@ -2,4 +2,4 @@
 
 TRUMP meme coin signal bot.
 
-*Debug v2 - Telegram env check*
+*Rebuild: fixed startup IIFE syntax*
