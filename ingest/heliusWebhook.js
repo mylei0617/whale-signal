@@ -76,6 +76,7 @@ import { score }            from "../core/scorer.js";
 import { decide }           from "../strategy/rules.js";
 import { sendMessage, formatSignal } from "../push/telegram.js";
 import { getTrumpPrice }       from "../core/price.js";
+import { formatPositionInfo }  from "../core/positionManager.js";
 import {
   walletStats,
   recordSignal,
@@ -151,7 +152,7 @@ async function processEvent(evt) {
   // 4. 检查 Pre-Pump（独立通道，不走阈值，直接推送）
   const prePump = checkPrePump(tx.wallet, features.direction, tx.usd);
   if (prePump) {
-    const msg = formatPrePump(prePump);
+    const msg = formatPrePump(prePump) + formatPositionInfo("PRE_PUMP", prePump.score);
     const sent = await sendMessage(msg);
     if (!sent) console.error("[webhook] Pre-Pump message failed");
     // 继续走共振逻辑（可能同时触发共振）
@@ -191,7 +192,9 @@ async function processEvent(evt) {
 
   // 9. 共振信号优先推送
   if (isResonance) {
-    const msg = formatResonanceV3(recentBuys, totalScore);
+    const isSmart = [...new Set(recentBuys.map(b => b.wallet))].some(w => (walletStats[w]?.winRate || 0.5) > 0.6);
+    const signalType = isSmart ? "SMART_RESONANCE" : "RESONANCE";
+    const msg = formatResonanceV3(recentBuys, totalScore) + formatPositionInfo(signalType, totalScore);
     const sent = await sendMessage(msg);
     if (!sent) console.error("[webhook] Failed to send resonance message");
     return;
@@ -209,7 +212,7 @@ async function processEvent(evt) {
     totalScore,
     level:      decision.level,
     action:     decision.action,
-  });
+  }) + (features.direction === "SELL" ? formatPositionInfo("SELL_RESONANCE", totalScore) : "");
 
   const sent = await sendMessage(message);
   if (!sent) console.error("[webhook] Failed to send Telegram message");
