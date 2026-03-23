@@ -76,7 +76,7 @@ import { score }            from "../core/scorer.js";
 import { decide }           from "../strategy/rules.js";
 import { sendMessage, formatSignal } from "../push/telegram.js";
 import { getTrumpPrice }       from "../core/price.js";
-import { formatPositionInfo }  from "../core/positionManager.js";
+import { formatPositionInfo, recordEntry, checkStopLoss } from "../core/positionManager.js";
 import {
   walletStats,
   recordSignal,
@@ -177,7 +177,7 @@ async function processEvent(evt) {
 
   console.log(`[webhook] tx=${tx.tx.slice(0,20)} dir=${features.direction} score=${totalScore} resonance=${isResonance}`);
 
-  // 8. 记录 BUY 信号用于30分钟后回溯
+  // 8. 记录 BUY 信号用于30分钟后回溯（同时记录建仓价格用于风控）
   if (features.direction === "BUY" && totalScore >= 30) {
     let price;
     try {
@@ -187,10 +187,17 @@ async function processEvent(evt) {
     }
     if (price > 0) {
       recordSignal(tx.wallet, price, tx.tx, totalScore);
+      recordEntry(price);
+      // 风控检查
+      const risk = checkStopLoss(price);
+      if (risk.triggered) {
+        const riskMsg = `\n─────────────\n${risk.message}`;
+        await sendMessage(riskMsg);
+        if (risk.systemPause) return; // 系统暂停，停止本次推送
+      }
     }
   }
-
-  // 9. 共振信号优先推送
+  // 8+9. 记录 BUY 信号 + 风控检查 + 共振优先推送
   if (isResonance) {
     const isSmart = [...new Set(recentBuys.map(b => b.wallet))].some(w => (walletStats[w]?.winRate || 0.5) > 0.6);
     const signalType = isSmart ? "SMART_RESONANCE" : "RESONANCE";

@@ -127,6 +127,15 @@ app.get("/test-resonance", async (req, res) => {
   res.json({ ok: true, message: "Resonance triggered — check Telegram" });
 });
 
+// Test endpoint — simulate stop loss trigger
+app.get("/test-stoploss", async (req, res) => {
+  const { recordEntry, checkStopLoss, updatePosition } = await import("./core/positionManager.js");
+  updatePosition("PRE_PUMP");  // 记录建仓，position=5%
+  recordEntry(100);            // 入场价 $100
+  const result = checkStopLoss(94); // 下跌6% → 触发止损
+  res.json({ ok: true, entry: 100, current: 94, drawdown: "6%", result });
+});
+
 // Test endpoint — force a BUY signal directly (bypass scoring)
 app.get("/test", async (req, res) => {
   const { sendMessage, formatSignal } = await import("./push/telegram.js");

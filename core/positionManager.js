@@ -13,6 +13,86 @@ export const POSITION_RULES = {
   SELL_RESONANCE: { action: "清仓", amount: 0  },
 };
 
+// ─── 风控系统 ────────────────────────────────────────────────────────────
+let entryPrice = 0;        // 建仓价格
+let stopLossCount = 0;      // 连续止损次数
+let pausedUntil = 0;         // 暂停截止时间戳
+
+export const STOP_LOSS_PCT = 0.05;  // 止损阈值 5%
+export const MAX_STOP_LOSS = 3;     // 连续3次止损暂停24h
+
+/**
+ * 建仓时记录入场价格
+ */
+export function recordEntry(price) {
+  entryPrice = price;
+  stopLossCount = 0;
+  console.log(`[risk] Entry recorded: $${price}`);
+}
+
+/**
+ * 检查是否触发止损
+ * @param {number} currentPrice
+ * @returns {{ triggered: boolean, drawdown: number, message: string }}
+ */
+export function checkStopLoss(currentPrice) {
+  if (currentPosition === 0 || entryPrice === 0) {
+    return { triggered: false, drawdown: 0, message: "" };
+  }
+
+  const drawdown = (entryPrice - currentPrice) / entryPrice;
+  const isPaused = Date.now() < pausedUntil;
+
+  if (isPaused) {
+    return { triggered: false, drawdown, message: "🛑 系统暂停中", paused: true };
+  }
+
+  if (drawdown >= STOP_LOSS_PCT) {
+    stopLossCount++;
+    const isSystemPause = stopLossCount >= MAX_STOP_LOSS;
+    if (isSystemPause) {
+      pausedUntil = Date.now() + 24 * 60 * 60 * 1000;
+      entryPrice = 0;
+      currentPosition = 0;
+      return {
+        triggered: true,
+        drawdown,
+        message: "🛑 系统暂停24h（连续3次止损触发）",
+        systemPause: true,
+      };
+    }
+    return {
+      triggered: true,
+      drawdown,
+      message: `⚠️ 止损触发（-${(drawdown * 100).toFixed(1)}%），建议减仓（${stopLossCount}/3）`,
+    };
+  }
+
+  return { triggered: false, drawdown, message: "" };
+}
+
+/**
+ * 格式化止损信息
+ */
+export function formatRiskInfo() {
+  if (currentPosition === 0 || entryPrice === 0) return "";
+
+  const risk = checkStopLoss(0); // 不实际触发，仅获取drawdown
+  if (risk.triggered) {
+    return `\n─────────────\n${risk.message}`;
+  }
+  return "";
+}
+
+/**
+ * 格式化风控提示（配合价格推送使用）
+ */
+export function formatRiskAlert() {
+  const risk = checkStopLoss(0);
+  if (!risk.triggered) return "";
+  return `\n─────────────\n${risk.message}`;
+}
+
 /**
  * 根据信号类型更新仓位
  * @param {string} signalType - PRE_PUMP | RESONANCE | SMART_RESONANCE | SELL_RESONANCE
