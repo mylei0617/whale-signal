@@ -35,36 +35,34 @@ function checkPrePump(wallet, direction, usd) {
   }
   lastPrePumpTs = now;
 
-  // 增强：≥2个高胜率钱包 → 高质量 Pre-Pump
-  const highQualityCount = uniqueWallets.filter(w => (walletStats[w]?.winRate || 0.5) >= 0.6).length;
-  const isHighQuality = highQualityCount >= 2;
+  // 增强评分：Tier A → 75, Tier S → 85, 普通 → 65
+  const hasTierS = uniqueWallets.some(w => (walletStats[w]?.tier || "B") === "S");
+  const hasTierA = uniqueWallets.some(w => (walletStats[w]?.tier || "B") === "A");
+  const score = hasTierS ? 85 : hasTierA ? 75 : 65;
+  const isHighQuality = hasTierS || hasTierA;
 
-  // 评分
-  const score = isHighQuality ? 75 : 65;
-
-  return { wallets: uniqueWallets, totalUSD, score, highWinRateCount, highQualityCount, isHighQuality };
+  return { wallets: uniqueWallets, totalUSD, score, hasTierS, hasTierA, isHighQuality };
 }
 
 function formatPrePump(data) {
-  const { wallets, totalUSD, score, highWinRateCount, isHighQuality } = data;
+  const { wallets, totalUSD, score, hasTierS, hasTierA } = data;
   const walletInfo = wallets.map(w => {
     const short = w.length > 8 ? `${w.slice(0,4)}...${w.slice(-4)}` : w;
     const rate = Math.round((walletStats[w]?.winRate || 0.5) * 100);
-    const tag = rate >= 60 ? "💎" : "";
-    return `${short}（胜率${rate}%）${tag}`;
+    const tag = rate >= 70 ? "👑" : rate >= 60 ? "💎" : "";
+    return `${short}（${tag}${rate}%）`;
   });
 
-  const prefix = isHighQuality ? "🔥 " : "";
+  const prefix = hasTierS ? "🔥 " : "";
 
   return (
-    `⚡️ *${prefix}Pre-Pump 信号（过滤后）*\n\n` +
+    `⚡️ *${prefix}Pre-Pump 信号*\n\n` +
     `检测到连续小额买入\n\n` +
     `钱包数：*${wallets.length}*\n` +
     `钱包：` + walletInfo.join(`  `) + `\n` +
-    `高胜率钱包：*${highWinRateCount}*\n` +
     `总金额：*$${totalUSD.toLocaleString("en-US", { maximumFractionDigits: 0 })}*\n\n` +
     `信号评分：*${score}*\n` +
-    `建议：小仓试探（5%）\n\n` +
+    `建议：${hasTierS ? "建仓 15%" : hasTierA ? "建仓 10%" : "小仓试探 5%"}\n\n` +
     `_${new Date().toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}_`
   );
 }
@@ -154,7 +152,8 @@ async function processEvent(evt) {
   // 4. 检查 Pre-Pump（独立通道，不走阈值，直接推送）
   const prePump = checkPrePump(tx.wallet, features.direction, tx.usd);
   if (prePump) {
-    const msg = formatPrePump(prePump) + formatPositionInfo("PRE_PUMP", prePump.score);
+    const signalType = prePump.hasTierS ? "PRE_PUMP_TIER_S" : prePump.hasTierA ? "PRE_PUMP_TIER_A" : "PRE_PUMP";
+    const msg = formatPrePump(prePump) + formatPositionInfo(signalType, prePump.score);
     const sent = await sendMessage(msg);
     if (!sent) console.error("[webhook] Pre-Pump message failed");
     // 继续走共振逻辑（可能同时触发共振）
@@ -207,8 +206,8 @@ async function processEvent(evt) {
   if (isResonance) {
     const isSmart = [...new Set(recentBuys.map(b => b.wallet))].some(w => (walletStats[w]?.winRate || 0.5) > 0.6);
     const signalType = isSmart ? "SMART_RESONANCE" : "RESONANCE";
-    const msg = formatResonanceV3(recentBuys, totalScore) + formatPositionInfo(signalType, totalScore);
-    const sent = await sendMessage(msg);
+    const resonanceMsg = formatResonanceV3(recentBuys, totalScore) + formatPositionInfo(signalType, totalScore);
+    const sent = await sendMessage(resonanceMsg);
     if (!sent) console.error("[webhook] Failed to send resonance message");
     return;
   }

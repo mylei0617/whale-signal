@@ -54,9 +54,9 @@ app.get("/test-prepump", async (req, res) => {
   const WALLET_B = "SmallBuyWallet2222222222222222";
   const WALLET_C = "SmallBuyWallet3333333333333333";
   // Seed win rates so filter passes (winRate >= 0.55 required)
-  walletStats[WALLET_A] = { totalTrades: 5, wins: 3, winRate: 0.60 };
-  walletStats[WALLET_B] = { totalTrades: 5, wins: 4, winRate: 0.80 };
-  walletStats[WALLET_C] = { totalTrades: 5, wins: 3, winRate: 0.60 };
+  walletStats[WALLET_A] = { totalTrades: 5, wins: 4, winRate: 0.80, avgProfit: 0.03, tier: "S" };
+  walletStats[WALLET_B] = { totalTrades: 5, wins: 3, winRate: 0.60, avgProfit: 0.01, tier: "A" };
+  walletStats[WALLET_C] = { totalTrades: 5, wins: 3, winRate: 0.60, avgProfit: 0.01, tier: "A" };
 
   const { heliusWebhookHandler } = await import("./ingest/heliusWebhook.js");
   const { TRUMP_MINT } = await import("./constants.js");

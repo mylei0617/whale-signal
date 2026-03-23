@@ -7,10 +7,12 @@ export let currentPosition = 0;  // 当前仓位百分比
 export const MAX_POSITION = 30; // 最大仓位 30%
 
 export const POSITION_RULES = {
-  PRE_PUMP:       { action: "加仓", amount: 5  },
-  RESONANCE:      { action: "加仓", amount: 15 },
-  SMART_RESONANCE:{ action: "加仓", amount: 30 },
-  SELL_RESONANCE: { action: "清仓", amount: 0  },
+  PRE_PUMP_TIER_A: { action: "加仓", amount: 10 },
+  PRE_PUMP_TIER_S: { action: "加仓", amount: 15 },
+  PRE_PUMP:        { action: "加仓", amount: 5  },
+  RESONANCE:       { action: "加仓", amount: 15 },
+  SMART_RESONANCE: { action: "加仓", amount: 30 },
+  SELL_RESONANCE:  { action: "清仓", amount: 0  },
 };
 
 // ─── 风控系统 ────────────────────────────────────────────────────────────
