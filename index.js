@@ -91,6 +91,42 @@ app.get("/test-prepump", async (req, res) => {
   res.json({ ok: true, message: "Pre-Pump triggered (3 wallets seeded with winRate ≥ 0.55) — check Telegram" });
 });
 
+// Test endpoint — simulate Tier S + Tier B wallets → trigger resonance with high score
+app.get("/test-tier", async (req, res) => {
+  const { walletStats, TIER_MAP } = await import("./core/smartMoney.js");
+  const WALLET_S = "SuperWhaleWallet111111111111111";
+  const WALLET_B = "NormalWallet111111111111111111";
+
+  // Seed Tier S wallet (winRate > 0.7 + avgProfit > 0.02)
+  walletStats[WALLET_S] = { totalTrades: 10, wins: 8, winRate: 0.8, avgProfit: 0.035, tier: "S" };
+  walletStats[WALLET_B] = { totalTrades: 5, wins: 3, winRate: 0.6, avgProfit: 0.01, tier: "A" };
+
+  const { heliusWebhookHandler } = await import("./ingest/heliusWebhook.js");
+  const { TRUMP_MINT } = await import("./constants.js");
+  const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+  const now = Math.floor(Date.now() / 1000);
+
+  const events = [
+    { signature: "tierS" + Date.now(), feePayer: WALLET_S, type: "SWAP", timestamp: now,
+      tokenTransfers: [
+        { fromUserAccount: "USDCVault", toUserAccount: WALLET_S, mint: TRUMP_MINT, tokenAmount: 100000 },
+        { fromUserAccount: WALLET_S, toUserAccount: "TRUMPVault", mint: USDC, tokenAmount: 50000 },
+      ],
+      events: { swap: { nativeInput: { amount: "500000000" } } }, // ~$75,000
+    },
+    { signature: "tierB" + Date.now(), feePayer: WALLET_B, type: "SWAP", timestamp: now - 30,
+      tokenTransfers: [
+        { fromUserAccount: "USDCVault", toUserAccount: WALLET_B, mint: TRUMP_MINT, tokenAmount: 100000 },
+        { fromUserAccount: WALLET_B, toUserAccount: "TRUMPVault", mint: USDC, tokenAmount: 50000 },
+      ],
+      events: { swap: { nativeInput: { amount: "500000000" } } }, // ~$75,000
+    },
+  ];
+
+  await heliusWebhookHandler({ body: events }, { status: () => ({ json: () => {} }) });
+  res.json({ ok: true, message: "Tier S+B resonance triggered — check Telegram" });
+});
+
 // Test endpoint — simulate 2 different wallets BUY TRUMP → trigger resonance
 app.get("/test-resonance", async (req, res) => {
   const { heliusWebhookHandler } = await import("./ingest/heliusWebhook.js");

@@ -81,6 +81,7 @@ import {
   walletStats,
   recordSignal,
   formatWinRateInfo,
+  hasTierS,
 } from "../core/smartMoney.js";
 
 // ─── Whale 共振检测缓存 ───────────────────────────────────────────────────
@@ -123,9 +124,10 @@ function formatResonanceV3(buys, totalScore) {
   const totalUSD = buys.reduce((sum, b) => sum + b.usd, 0);
   const walletInfo = formatWinRateInfo(wallets);
   const smartTag = wallets.some(w => (walletStats[w]?.winRate || 0.5) > 0.6) ? "💎 Smart Money" : "";
+  const tierSTag = hasTierS(wallets) ? "👑 S级资金" : "";
 
   return (
-    `🔥 *${smartTag}Whale共振信号*\n\n` +
+    `🔥 *${tierSTag || smartTag || "Whale"}共振信号*\n\n` +
     `*${wallets.length}* 个钱包同时买入 TRUMP\n` +
     `钱包：` + walletInfo.join(`  `) + `\n` +
     `总金额：*$${totalUSD.toLocaleString("en-US", { maximumFractionDigits: 0 })}*\n\n` +
@@ -171,6 +173,10 @@ async function processEvent(evt) {
     // 7. Smart Money共振增强（≥2钱包且有高胜率钱包 +20）
     if ([...new Set(recentBuys.map(b => b.wallet))].some(w => (walletStats[w]?.winRate || 0.5) > 0.6)) {
       totalScore += 20;
+    }
+    // 8. Tier S 共振增强（+30）
+    if (hasTierS([...new Set(recentBuys.map(b => b.wallet))])) {
+      totalScore += 30;
     }
     console.log(`[webhook] 🔥 RESONANCE DETECTED! score=${totalScore}`);
   }
