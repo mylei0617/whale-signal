@@ -126,7 +126,7 @@ app.get("/test-signal", async (req, res) => {
   res.json({ ok: true, message: "Forced BUY signal sent — check Telegram" });
 });
 
-// ─── 系统完整测试套件（无 Telegram）───────────────────────────────────────
+// ─── 系统完整测试套件（无 Telegram，skipMomentum=true）────────────────────────
 
 // Step 1: 基础交易
 app.get("/test-trade", async (req, res) => {
@@ -135,7 +135,7 @@ app.get("/test-trade", async (req, res) => {
   clearHistory();
   const before = getPosition();
   const tx = "test_trade_" + Date.now();
-  const result = await executeSignal("RESONANCE", 0, tx);
+  const result = await executeSignal("RESONANCE", 0, tx, true); // skipMomentum=true
   const after = getPosition();
   res.json({ step: 1, test: "基础交易", result: result?.action || "null", before, after, ok: after > before, tx });
 });
@@ -146,7 +146,7 @@ app.get("/test-stoploss", async (req, res) => {
   const { recordOpen } = await import("./execution/performance.js");
   recordOpen(100, 15, "TEST");
   const before = getPosition();
-  const result = await executeSignal("STOP_LOSS", 15);
+  const result = await executeSignal("STOP_LOSS", 15, "", true);
   const after = getPosition();
   res.json({ step: 2, test: "止损", result: result?.action || "null", before, after, ok: after === 0 });
 });
@@ -165,9 +165,9 @@ app.get("/test-invalid", async (req, res) => {
 app.get("/test-idempotency", async (req, res) => {
   const { executeSignal, processedTx } = await import("./execution/trader.js");
   const tx = "idem_" + Date.now();
-  const r1 = await executeSignal("RESONANCE", 0, tx);
-  const r2 = await executeSignal("RESONANCE", 0, tx);
-  const r3 = await executeSignal("RESONANCE", 0, tx);
+  const r1 = await executeSignal("RESONANCE", 0, tx, true);
+  const r2 = await executeSignal("RESONANCE", 0, tx, true);
+  const r3 = await executeSignal("RESONANCE", 0, tx, true);
   res.json({ step: 4, test: "幂等控制", r1: !!r1, r2: !!r2, r3: !!r3, ok: !!r1 && !r2 && !r3 });
 });
 
@@ -196,7 +196,7 @@ app.get("/test-all", async (req, res) => {
     const { clearHistory } = await import("./execution/performance.js");
     clearHistory();
     const tx = "full_" + Date.now();
-    const r = await executeSignal("RESONANCE", 0, tx);
+    const r = await executeSignal("RESONANCE", 0, tx, true);
     results.push({ step: 1, name: "基础交易", ok: r !== null });
   } catch(e) { results.push({ step: 1, name: "基础交易", ok: false, error: e.message }); }
   try {
@@ -207,8 +207,8 @@ app.get("/test-all", async (req, res) => {
   try {
     const { executeSignal, processedTx } = await import("./execution/trader.js");
     const tx2 = "idem_" + Date.now();
-    await executeSignal("RESONANCE", 0, tx2);
-    await executeSignal("RESONANCE", 0, tx2);
+    await executeSignal("RESONANCE", 0, tx2, true);
+    await executeSignal("RESONANCE", 0, tx2, true);
     results.push({ step: 4, name: "幂等控制", ok: processedTx.has(tx2) });
   } catch(e) { results.push({ step: 4, name: "幂等控制", ok: false, error: e.message }); }
   try {

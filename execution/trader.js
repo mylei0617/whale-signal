@@ -85,7 +85,7 @@ const POSITION_MAP = {
   RESONANCE: 15, SMART_RESONANCE: 30, SELL_RESONANCE: 0, STOP_LOSS: 0,
 };
 
-export async function executeSignal(signalType, currentPosition = 0, tx = "") {
+export async function executeSignal(signalType, currentPosition = 0, tx = "", skipMomentum = false) {
   // 幂等检查
   if (tx && processedTx.has(tx)) {
     console.log(`[trader] duplicate tx ignored: ${tx.slice(0,20)}`);
@@ -103,13 +103,19 @@ export async function executeSignal(signalType, currentPosition = 0, tx = "") {
     return result;
   }
 
-  // BUY：动量过滤，先入队等5分钟
+  // BUY：动量过滤，等5分钟（测试模式可跳过）
   const price = await getMarketPrice();
   if (price > 0) {
+    if (skipMomentum) {
+      // 测试模式：直接执行，不等
+      const result = await doBuy(signalType, targetPos);
+      if (result && tx) processedTx.add(tx);
+      return result;
+    }
     momentumQueue.push({ ts: Date.now(), entryPrice: price, signalType, tx });
     console.log(`[trader] ⏳ 动量等待中，5分钟后确认... tx=${tx.slice(0,20)}`);
   }
-  return null; // 等5分钟后再处理
+  return null;
 }
 
 // ─── 格式化消息 ─────────────────────────────────────────────────────────
