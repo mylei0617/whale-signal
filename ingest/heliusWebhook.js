@@ -228,10 +228,10 @@ async function processEvent(evt) {
   };
 
   // 8. BUY信号加入动量队列，等5分钟后再处理
-  if (features.direction === "BUY" && (isResonance || prePump || totalScore >= 70)) {
+  if (features.direction === "BUY" && (isResonance || prePump || totalScore >= 30)) {
     debug(true, "BUY signal queued for momentum confirmation");
   } else if (features.direction === "BUY") {
-    debug(false, `score=${totalScore} < 70 (below threshold)`);
+    debug(false, `score=${totalScore} < 30 (below threshold)`);
   }
   // 记录建仓价格用于风控，momentum确认后自动执行
   if (features.direction === "BUY" && (isResonance || prePump || totalScore >= 70)) {

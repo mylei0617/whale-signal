@@ -73,7 +73,7 @@ async function doBuy(signalType, quantity) {
 async function doSell(signalType, reason) {
   const price = await getMarketPrice();
   if (!price) return null;
-  recordClose(price, reason);
+  recordClose(price, reason); // performance.js 里记录，不重复 push
   if (MODE === "paper") paperPosition = 0;
   const entry = { mode: MODE, side: "SELL", signalType, price, quantity: 0, action: "✅ 已自动卖出" };
   logTrade(entry);
