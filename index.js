@@ -47,11 +47,18 @@ app.get("/test-signal", async (req, res) => {
 });
 
 // Test endpoint — simulate 3 wallets small BUY → trigger Pre-Pump
+// Pre-seeds wallet win rates so filter passes
 app.get("/test-prepump", async (req, res) => {
-  const { heliusWebhookHandler } = await import("./ingest/heliusWebhook.js");
+  const { walletStats } = await import("./core/smartMoney.js");
   const WALLET_A = "SmallBuyWallet1111111111111111";
   const WALLET_B = "SmallBuyWallet2222222222222222";
   const WALLET_C = "SmallBuyWallet3333333333333333";
+  // Seed win rates so filter passes (winRate >= 0.55 required)
+  walletStats[WALLET_A] = { totalTrades: 5, wins: 3, winRate: 0.60 };
+  walletStats[WALLET_B] = { totalTrades: 5, wins: 4, winRate: 0.80 };
+  walletStats[WALLET_C] = { totalTrades: 5, wins: 3, winRate: 0.60 };
+
+  const { heliusWebhookHandler } = await import("./ingest/heliusWebhook.js");
   const { TRUMP_MINT } = await import("./constants.js");
   const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
   const now = Math.floor(Date.now() / 1000);
@@ -81,7 +88,7 @@ app.get("/test-prepump", async (req, res) => {
   ];
 
   await heliusWebhookHandler({ body: events }, { status: () => ({ json: () => {} }) });
-  res.json({ ok: true, message: "Pre-Pump triggered — check Telegram" });
+  res.json({ ok: true, message: "Pre-Pump triggered (3 wallets seeded with winRate ≥ 0.55) — check Telegram" });
 });
 
 // Test endpoint — simulate 2 different wallets BUY TRUMP → trigger resonance
