@@ -85,6 +85,8 @@ import {
 
 // ─── Whale 共振检测缓存 ───────────────────────────────────────────────────
 let recentBuys = [];       // { wallet, ts, usd }
+let recentBuySignals = [];  // { wallet, ts, signalType, targetPosition }
+let cancelledSignals = new Set(); // 被冲突取消的 tx
 let lastResonanceTs = 0;   // 上次共振推送时间戳（ms）
 
 // ─── 共振检测核心逻辑 ─────────────────────────────────────────────────────
@@ -156,13 +158,39 @@ async function processEvent(evt) {
     const signalType = prePump.hasTierS ? "PRE_PUMP_TIER_S" : prePump.hasTierA ? "PRE_PUMP_TIER_A" : "PRE_PUMP";
     const msg = formatPrePump(prePump) + formatPositionInfo(signalType, prePump.score);
     const sent = await sendMessage(msg);
+    // 记录到冲突检测
+    recentBuySignals.push({ wallet: tx.wallet, ts: Date.now(), signalType, targetPosition: prePump.score >= 75 ? 15 : 5 });
     // 自动交易
     const trade = await executeSignal(signalType, getPosition());
     if (trade) {
       await sendMessage(formatTradeMessage(trade));
     }
     if (!sent) console.error("[webhook] Pre-Pump message failed");
-    // 继续走共振逻辑（可能同时触发共振）
+
+  // ─── 冲突检测：BUY后60秒内出现大额SELL → 取消交易 ──────────────
+  const now = Date.now();
+  recentBuySignals = recentBuySignals.filter(s => now - s.ts < 60000);
+
+  // 检查大额SELL（usd > 30000）是否冲掉近期BUY
+  if (features.direction === "SELL" && tx.usd > 30000) {
+    if (recentBuySignals.length > 0) {
+      const conflictMsg = "⚠️ *信号冲突*\n\n检测到反向资金流入\n已取消建仓信号\n─────────────\n⚠️ 买入信号已被反向大单冲销，仓位不变";
+      await sendMessage(conflictMsg);
+      recentBuySignals = []; // 清空被冲突的BUY信号
+      cancelledSignals.add(tx.tx);
+      console.log(`[webhook] ⚠️ CONFLICT: Large SELL $${tx.usd.toLocaleString()} cancelled ${recentBuySignals.length} BUY signals`);
+      return; // 不继续推送BUY信号
+    }
+  }
+
+  // 记录BUY信号（用于60秒内检测冲突）
+  if (features.direction === "BUY" && (isResonance || prePump || totalScore >= 30)) {
+    const targetPos = isResonance ? (hasTierS([...new Set(recentBuys.map(b => b.wallet))]) ? 30 : 15)
+      : prePump ? (prePump.hasTierS ? 15 : prePump.hasTierA ? 10 : 5) : 10;
+    recentBuySignals.push({ wallet: tx.wallet, ts: now, signalType: "BUY", targetPosition: targetPos });
+  }
+
+  // 继续走共振逻辑（可能同时触发共振）
   }
 
   // 5. 检查共振
