@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express from "express";
 import { heliusWebhookHandler } from "./ingest/heliusWebhook.js";
 import { sendMessage } from "./push/telegram.js";
