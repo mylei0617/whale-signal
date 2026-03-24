@@ -2,4 +2,4 @@
 
 TRUMP meme coin signal bot.
 
-*Clean rewrite - Railway will start and send Telegram message on boot*
+*Build: ae8f60de - dotenv import added*
