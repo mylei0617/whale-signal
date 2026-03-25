@@ -222,6 +222,65 @@ setInterval(async function() {
   } catch(e) { console.error("[bg] Error:", e.message); }
 }, 60 * 1000);
 
+
+// Grayscale HZEN monitoring - every 6 hours
+(function() {
+  var lastCheck = 0;
+  var state = {};
+  
+  function checkGrayscale() {
+    var now = Date.now();
+    if (now - lastCheck < 6 * 60 * 60 * 1000) return;
+    lastCheck = now;
+    
+    fetch('https://grayscale.com/products/grayscale-horizen-trust/', {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
+    }).then(function(r) { return r.text(); }).then(function(html) {
+      var aumM = html.match(/\$(\d{1,3}(?:,\d{3})+) ASSETS UNDER MANAGEMENT/);
+      var navM = html.match(/\$(\d+\.\d+) NET ASSET VALUE \(NAV\) PER SHARE/);
+      var sharesM = html.match(/(\d{1,3}(?:,\d{3})+) NAV PER SHARE 1D CHANGE/);
+      var priceM = html.match(/MARKET PRICE \$(\d+\.\d+)/);
+      
+      if (!aumM || !navM || !sharesM || !priceM) {
+        console.log('[grayscale] Could not extract data from page');
+        return;
+      }
+      
+      var aum = parseInt(aumM[1].replace(/,/g,''));
+      var nav = parseFloat(navM[1]);
+      var shares = parseInt(sharesM[1].replace(/,/g,''));
+      var price = parseFloat(priceM[1]);
+      var zenHeld = Math.round(aum / price);
+      
+      console.log('[grayscale] AUM: $' + aum.toLocaleString() + ' | ZEN held: ' + zenHeld.toLocaleString() + ' | Price: $' + price);
+      
+      if (state.aum && state.aum > 0) {
+        var aumChg = (aum - state.aum) / state.aum * 100;
+        var zenChg = (zenHeld - state.zenHeld) / state.zenHeld * 100;
+        if (Math.abs(aumChg) >= 5 || Math.abs(zenChg) >= 5) {
+          var direction = zenChg > 0 ? '📈 增持' : '📉 减持';
+          var msg = '🔔 *Grayscale ZEN Trust 持仓变化\n\n' +
+            direction + ' AUM变化: ' + (aumChg >= 0 ? '+' : '') + aumChg.toFixed(1) + '%\n' +
+            '上次数值: $' + state.aum.toLocaleString() + '\n' +
+            '当前数值: $' + aum.toLocaleString() + '\n\n' +
+            'ZEN持仓: ' + zenHeld.toLocaleString() + ' ZEN\n' +
+            'ZEN价格: $' + price + '\n' +
+            'Shares: ' + shares.toLocaleString() + '\n' +
+            'NAV/Share: $' + nav + '\n' +
+            '⏰ ' + new Date().toLocaleString('zh-CN', {timeZone:'Asia/Shanghai'});
+          sendMessage(msg);
+        }
+      }
+      
+      state = { aum: aum, nav: nav, shares: shares, price: price, zenHeld: zenHeld, ts: now };
+    }).catch(function(e) { console.error('[grayscale] Error:', e.message); });
+  }
+  
+  // Run every 60s, but only check every 6h
+  setInterval(checkGrayscale, 60 * 1000);
+  checkGrayscale(); // run immediately on startup
+})();
+
 app.listen(PORT, function() {
   console.log("========================================");
   console.log("  Whale Signal System V1 ready");
